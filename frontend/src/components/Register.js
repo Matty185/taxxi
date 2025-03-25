@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import taxxi from '../assets/taxxi.png'; // Ensure the path is correct
+import taxxi from '../assets/taxxi.png';
 
 const Register = () => {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -13,21 +14,29 @@ const Register = () => {
     e.preventDefault();
     try {
       const response = await axios.post('http://localhost:5000/api/auth/register', {
+        name,
         email,
         password,
       });
-      localStorage.setItem('token', response.data.token); // Save the JWT token
-      navigate('/dashboard'); // Redirect to the dashboard after registration
+      localStorage.setItem('token', response.data.token);
+      navigate('/dashboard');
     } catch (err) {
-      setError('Registration failed. Please try again.');
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
     }
   };
 
   return (
     <div style={styles.container}>
-      {/* Logo with adjusted size */}
       <img src={taxxi} alt="TAXXi Logo" style={styles.logo} />
       <form onSubmit={handleRegister} style={styles.form}>
+        <input
+          type="text"
+          placeholder="Enter your full name..."
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          style={styles.input}
+          required
+        />
         <input
           type="email"
           placeholder="Enter your email..."
@@ -69,11 +78,11 @@ const styles = {
     backgroundColor: '#f5f5f5',
   },
   logo: {
-    width: '300px', // Match the width of the form
-    maxWidth: '100%', // Ensure it doesn't overflow on smaller screens
-    height: 'auto', // Maintain aspect ratio
-    marginBottom: '20px', // Add spacing below the logo
-    objectFit: 'contain', // Ensure the logo scales properly
+    width: '300px',
+    maxWidth: '100%',
+    height: 'auto',
+    marginBottom: '20px',
+    objectFit: 'contain',
   },
   form: {
     display: 'flex',
