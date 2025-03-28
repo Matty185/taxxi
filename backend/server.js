@@ -15,7 +15,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json()); // Parse JSON request bodies
+
+// Parse JSON request bodies
+app.use(express.json());
 
 // Routes
 app.use("/api/auth", authRoutes);

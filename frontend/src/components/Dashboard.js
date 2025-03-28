@@ -17,11 +17,82 @@ const RecentLocation = ({ name, description }) => (
   </div>
 );
 
+const LocationSearchInput = ({ value, onChange, onSelect, placeholder }) => {
+  const [suggestions, setSuggestions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const searchLocation = async (query) => {
+    if (!query) {
+      setSuggestions([]);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Bias the search to Ireland by using a bounding box
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxgl.accessToken}&country=ie&bbox=-10.76,51.35,-5.99,55.45&types=place,address,poi`
+      );
+      const data = await response.json();
+      setSuggestions(data.features || []);
+    } catch (error) {
+      console.error('Error fetching location suggestions:', error);
+    }
+    setIsLoading(false);
+  };
+
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    onChange(value);
+    searchLocation(value);
+  };
+
+  const handleSuggestionClick = (suggestion) => {
+    const locationName = suggestion.place_name;
+    onChange(locationName);
+    onSelect({
+      name: locationName,
+      coordinates: suggestion.center
+    });
+    setSuggestions([]);
+  };
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={handleInputChange}
+        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+      />
+      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+      
+      {/* Suggestions dropdown */}
+      {suggestions.length > 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200">
+          {suggestions.map((suggestion) => (
+            <div
+              key={suggestion.id}
+              className="px-4 py-2 hover:bg-gray-50 cursor-pointer"
+              onClick={() => handleSuggestionClick(suggestion)}
+            >
+              <p className="text-sm font-medium text-gray-900">{suggestion.place_name}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [pickupLocation, setPickupLocation] = useState("");
   const [dropoffLocation, setDropoffLocation] = useState("");
+  const [pickupCoordinates, setPickupCoordinates] = useState(null);
+  const [dropoffCoordinates, setDropoffCoordinates] = useState(null);
   const [activeTab, setActiveTab] = useState('recent');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +125,48 @@ const Dashboard = () => {
       if (map.current) map.current.remove();
     };
   }, []);
+
+  // Update map markers when locations change
+  useEffect(() => {
+    if (!map.current) return;
+
+    // Remove existing markers
+    const markers = document.getElementsByClassName('mapboxgl-marker');
+    while(markers[0]) {
+      markers[0].remove();
+    }
+
+    // Add pickup marker
+    if (pickupCoordinates) {
+      const marker = new mapboxgl.Marker({ color: '#ec4899' })
+        .setLngLat(pickupCoordinates)
+        .addTo(map.current);
+      
+      map.current.flyTo({
+        center: pickupCoordinates,
+        zoom: 14
+      });
+    }
+
+    // Add dropoff marker
+    if (dropoffCoordinates) {
+      new mapboxgl.Marker({ color: '#14b8a6' })
+        .setLngLat(dropoffCoordinates)
+        .addTo(map.current);
+
+      // If both markers exist, fit bounds to show both
+      if (pickupCoordinates) {
+        const bounds = new mapboxgl.LngLatBounds()
+          .extend(pickupCoordinates)
+          .extend(dropoffCoordinates);
+
+        map.current.fitBounds(bounds, {
+          padding: 50,
+          duration: 1000
+        });
+      }
+    }
+  }, [pickupCoordinates, dropoffCoordinates]);
 
   // Fetch user data
   useEffect(() => {
@@ -134,10 +247,10 @@ const Dashboard = () => {
   };
 
   const handleStartRide = async () => {
-    if (!pickupLocation || !dropoffLocation) {
+    if (!pickupLocation || !dropoffLocation || !pickupCoordinates || !dropoffCoordinates) {
       setRideStatus({ 
         loading: false, 
-        error: "Please enter both pickup and drop-off locations" 
+        error: "Please select both pickup and drop-off locations from the suggestions"
       });
       return;
     }
@@ -146,27 +259,48 @@ const Dashboard = () => {
 
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const requestData = {
+        pickupLocation,
+        dropoffLocation,
+        pickupCoordinates: {
+          longitude: pickupCoordinates[0],
+          latitude: pickupCoordinates[1]
+        },
+        dropoffCoordinates: {
+          longitude: dropoffCoordinates[0],
+          latitude: dropoffCoordinates[1]
+        }
+      };
+
+      console.log('Sending request with data:', requestData);
+      console.log('Token:', token);
+
       const response = await fetch('http://localhost:5000/api/rides/start', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          pickupLocation,
-          dropoffLocation
-        })
+        body: JSON.stringify(requestData)
       });
 
+      console.log('Response status:', response.status);
+      const responseData = await response.json();
+      console.log('Response data:', responseData);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to start ride');
+        throw new Error(responseData.message || responseData.error || 'Failed to start ride');
       }
 
-      const rideData = await response.json();
-      setActiveRide(rideData);
+      setActiveRide(responseData);
       setPickupLocation("");
       setDropoffLocation("");
+      setPickupCoordinates(null);
+      setDropoffCoordinates(null);
       setRideStatus({ 
         loading: false, 
         error: null, 
@@ -253,28 +387,26 @@ const Dashboard = () => {
           {!activeRide && (
             <div className="space-y-4 mb-6">
               {/* Pickup Location */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Enter pickup location"
-                  value={pickupLocation}
-                  onChange={(e) => setPickupLocation(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                />
-                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              </div>
+              <LocationSearchInput
+                value={pickupLocation}
+                onChange={setPickupLocation}
+                onSelect={(location) => {
+                  setPickupLocation(location.name);
+                  setPickupCoordinates(location.coordinates);
+                }}
+                placeholder="Enter pickup location"
+              />
 
               {/* Drop-off Location */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Enter drop-off location"
-                  value={dropoffLocation}
-                  onChange={(e) => setDropoffLocation(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                />
-                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              </div>
+              <LocationSearchInput
+                value={dropoffLocation}
+                onChange={setDropoffLocation}
+                onSelect={(location) => {
+                  setDropoffLocation(location.name);
+                  setDropoffCoordinates(location.coordinates);
+                }}
+                placeholder="Enter drop-off location"
+              />
 
               {/* Start Ride Button */}
               <button

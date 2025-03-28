@@ -14,7 +14,9 @@ const auth = (req, res, next) => {
 
     // Log the JWT_SECRET (first few characters for security)
     console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
-    console.log('JWT_SECRET prefix:', process.env.JWT_SECRET?.substring(0, 3));
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET is not configured');
+    }
 
     const verified = jwt.verify(token, process.env.JWT_SECRET);
     console.log('Token verified:', verified);
@@ -23,7 +25,13 @@ const auth = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Auth middleware error:', error.message);
-    res.status(401).json({ message: 'Token verification failed, authorization denied' });
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid token', error: error.message });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired', error: error.message });
+    }
+    res.status(401).json({ message: 'Token verification failed', error: error.message });
   }
 };
 
