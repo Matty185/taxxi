@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require("../models/User.js");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const auth = require("../middleware/auth");
 
 // Register a new user
 router.post("/register", async (req, res) => {
@@ -46,6 +47,20 @@ router.post("/login", async (req, res) => {
     res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
   } catch (error) {
     console.error("Login error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// Get user profile
+router.get("/profile", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error("Profile fetch error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });

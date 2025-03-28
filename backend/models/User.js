@@ -14,6 +14,17 @@ class User {
     }
   }
 
+  // Find a user by ID
+  static async findById(id) {
+    try {
+      const result = await client.query('SELECT id, name, email FROM users WHERE id = $1', [id]);
+      return result.rows[0]; // Return the user object if found, otherwise undefined
+    } catch (error) {
+      console.error('Error finding user by ID:', error);
+      throw error;
+    }
+  }
+
   // Create a new user
   static async createUser(name, email, password) {
     try {
