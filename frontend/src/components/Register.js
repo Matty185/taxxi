@@ -14,15 +14,24 @@ const Register = () => {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
+      console.log('Attempting registration with:', { name, email, role });
+      
       const response = await axios.post('http://localhost:5000/api/auth/register', {
         name,
         email,
         password,
         role,
       });
+
+      console.log('Registration response:', response.data);
+      
       localStorage.setItem('token', response.data.token);
+      
+      // Log the navigation attempt
+      console.log(`Navigating to ${role === 'driver' ? '/driver-dashboard' : '/dashboard'}`);
       navigate(role === 'driver' ? '/driver-dashboard' : '/dashboard');
     } catch (err) {
+      console.error('Registration error:', err.response?.data || err.message);
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     }
   };

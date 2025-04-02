@@ -12,21 +12,28 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
+      console.log('Attempting login with:', { email });
+      
       const response = await axios.post('http://localhost:5000/api/auth/login', {
         email,
         password,
       });
       
       const { token, user } = response.data;
+      console.log('Login response:', { user });
+      
       localStorage.setItem('token', token);
       
       // Route based on user role
       if (user.role === 'driver') {
+        console.log('Routing to driver dashboard');
         navigate('/driver-dashboard');
       } else {
+        console.log('Routing to customer dashboard');
         navigate('/dashboard');
       }
     } catch (err) {
+      console.error('Login error:', err);
       setError(err.response?.data?.message || 'Login failed. Please try again.');
     }
   };

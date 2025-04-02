@@ -13,10 +13,30 @@ const DriverDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [generatingRide, setGeneratingRide] = useState(false);
 
+  // Add initial role check
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const decoded = JSON.parse(atob(token.split('.')[1]));
+        console.log('Decoded token:', decoded);
+        if (decoded.role !== 'driver') {
+          console.log('Not a driver, redirecting to customer dashboard');
+          navigate('/dashboard');
+          return;
+        }
+      } catch (error) {
+        console.error('Error decoding token:', error);
+        navigate('/login');
+      }
+    }
+  }, [navigate]);
+
   const fetchUserData = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
+        console.log('No token found, redirecting to login');
         navigate('/login');
         return;
       }
@@ -24,6 +44,16 @@ const DriverDashboard = () => {
       const response = await axios.get('http://localhost:5000/api/auth/profile', {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      console.log('Fetched user data:', response.data);
+      
+      // Verify user is a driver
+      if (response.data.role !== 'driver') {
+        console.log('User is not a driver, redirecting to customer dashboard');
+        navigate('/dashboard');
+        return;
+      }
+      
       setUser(response.data);
     } catch (error) {
       console.error('Error fetching user data:', error);

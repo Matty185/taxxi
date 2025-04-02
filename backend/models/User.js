@@ -28,6 +28,13 @@ class User {
   // Create a new user
   static async createUser(name, email, password, role = 'customer') {
     try {
+      console.log('Creating user:', { name, email, role });
+      
+      // Validate role
+      if (!['customer', 'driver'].includes(role)) {
+        throw new Error('Invalid role specified');
+      }
+
       // Hash the password
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(password, salt);
@@ -38,9 +45,13 @@ class User {
         [name, email, passwordHash, role]
       );
 
+      console.log('User created successfully:', result.rows[0]);
       return result.rows[0]; // Return the newly created user
     } catch (error) {
       console.error('Error creating user:', error);
+      if (error.code === '23505') { // Unique violation error code
+        throw new Error('Email already exists');
+      }
       throw error;
     }
   }
