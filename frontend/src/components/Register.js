@@ -7,6 +7,7 @@ const Register = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState('customer');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -17,9 +18,10 @@ const Register = () => {
         name,
         email,
         password,
+        role,
       });
       localStorage.setItem('token', response.data.token);
-      navigate('/dashboard');
+      navigate(role === 'driver' ? '/driver-dashboard' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     }
@@ -53,6 +55,33 @@ const Register = () => {
           style={styles.input}
           required
         />
+        
+        <div style={styles.roleContainer}>
+          <label style={styles.roleLabel}>Register as:</label>
+          <div style={styles.roleButtons}>
+            <button
+              type="button"
+              onClick={() => setRole('customer')}
+              style={{
+                ...styles.roleButton,
+                ...(role === 'customer' ? styles.roleButtonActive : {})
+              }}
+            >
+              Customer
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('driver')}
+              style={{
+                ...styles.roleButton,
+                ...(role === 'driver' ? styles.roleButtonActive : {})
+              }}
+            >
+              Driver
+            </button>
+          </div>
+        </div>
+
         <button type="submit" style={styles.button}>
           Register
         </button>
@@ -94,6 +123,32 @@ const styles = {
     padding: '10px',
     borderRadius: '5px',
     border: '1px solid #ccc',
+  },
+  roleContainer: {
+    margin: '10px 0',
+  },
+  roleLabel: {
+    marginBottom: '8px',
+    color: '#333',
+    fontSize: '14px',
+  },
+  roleButtons: {
+    display: 'flex',
+    gap: '10px',
+  },
+  roleButton: {
+    flex: 1,
+    padding: '8px',
+    border: '1px solid #ccc',
+    borderRadius: '5px',
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  roleButtonActive: {
+    backgroundColor: '#007bff',
+    color: '#fff',
+    borderColor: '#0056b3',
   },
   button: {
     margin: '10px 0',

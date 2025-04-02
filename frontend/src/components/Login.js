@@ -16,10 +16,18 @@ const Login = () => {
         email,
         password,
       });
-      localStorage.setItem('token', response.data.token); // Save the JWT token
-      navigate('/dashboard'); // Redirect to the dashboard after login
+      
+      const { token, user } = response.data;
+      localStorage.setItem('token', token);
+      
+      // Route based on user role
+      if (user.role === 'driver') {
+        navigate('/driver-dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
-      setError('Login failed. Please check your credentials.');
+      setError(err.response?.data?.message || 'Login failed. Please try again.');
     }
   };
 
@@ -51,9 +59,6 @@ const Login = () => {
       </form>
       <p style={styles.link} onClick={() => navigate('/register')}>
         Don't have an account? Sign Up
-      </p>
-      <p style={styles.link} onClick={() => navigate('/book-without-registration')}>
-        Book without registration
       </p>
     </div>
   );

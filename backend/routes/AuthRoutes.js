@@ -7,9 +7,14 @@ const auth = require("../middleware/auth");
 
 // Register a new user
 router.post("/register", async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
 
   try {
+    // Validate role
+    if (role && !['customer', 'driver'].includes(role)) {
+      return res.status(400).json({ message: "Invalid role specified" });
+    }
+
     // Check if the email is already in use
     const existingUser = await User.findByEmail(email);
     if (existingUser) {
@@ -17,8 +22,21 @@ router.post("/register", async (req, res) => {
     }
 
     // Create a new user
-    const newUser = await User.createUser(name, email, password);
-    res.status(201).json({ message: "User registered", user: newUser });
+    const newUser = await User.createUser(name, email, password, role);
+    
+    // Generate a JWT token
+    const token = jwt.sign({ id: newUser.id, role: newUser.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    
+    res.status(201).json({ 
+      message: "User registered", 
+      token,
+      user: { 
+        id: newUser.id, 
+        name: newUser.name, 
+        email: newUser.email, 
+        role: newUser.role 
+      } 
+    });
   } catch (error) {
     console.error("Registration error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
@@ -43,8 +61,16 @@ router.post("/login", async (req, res) => {
     }
 
     // Generate a JWT token
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    res.json({ 
+      token, 
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role 
+      } 
+    });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Server error", error: error.message });

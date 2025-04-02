@@ -17,7 +17,7 @@ class User {
   // Find a user by ID
   static async findById(id) {
     try {
-      const result = await client.query('SELECT id, name, email FROM users WHERE id = $1', [id]);
+      const result = await client.query('SELECT id, name, email, role FROM users WHERE id = $1', [id]);
       return result.rows[0]; // Return the user object if found, otherwise undefined
     } catch (error) {
       console.error('Error finding user by ID:', error);
@@ -26,7 +26,7 @@ class User {
   }
 
   // Create a new user
-  static async createUser(name, email, password) {
+  static async createUser(name, email, password, role = 'customer') {
     try {
       // Hash the password
       const salt = await bcrypt.genSalt(10);
@@ -34,8 +34,8 @@ class User {
 
       // Insert the user into the database
       const result = await client.query(
-        'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email',
-        [name, email, passwordHash]
+        'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
+        [name, email, passwordHash, role]
       );
 
       return result.rows[0]; // Return the newly created user
