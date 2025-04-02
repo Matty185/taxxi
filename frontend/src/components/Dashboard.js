@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import mapboxgl from 'mapbox-gl';
-import { Search, MapPin, Clock, Car } from 'lucide-react';
+import { Search, MapPin, Clock, Car, X, LogOut } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 mapboxgl.accessToken = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 
@@ -87,6 +89,7 @@ const LocationSearchInput = ({ value, onChange, onSelect, placeholder }) => {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [pickupLocation, setPickupLocation] = useState("");
@@ -100,6 +103,8 @@ const Dashboard = () => {
   const [rideStatus, setRideStatus] = useState({ loading: false, error: null });
   const [activeRide, setActiveRide] = useState(null);
   const [rideHistory, setRideHistory] = useState([]);
+  const [rideType, setRideType] = useState('personal');
+  const [passengerCount, setPassengerCount] = useState(1);
 
   // Initialize map when component mounts
   useEffect(() => {
@@ -273,7 +278,9 @@ const Dashboard = () => {
         dropoffCoordinates: {
           longitude: dropoffCoordinates[0],
           latitude: dropoffCoordinates[1]
-        }
+        },
+        rideType,
+        passengerCount
       };
 
       console.log('Sending request with data:', requestData);
@@ -339,150 +346,240 @@ const Dashboard = () => {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="w-[500px] mx-auto py-8">
-        {/* Map Container */}
-        <div className="bg-white rounded-lg shadow-lg p-2 mb-4">
-          <div 
-            ref={mapContainer}
-            style={{
-              width: '100%',
-              height: '300px',
-              borderRadius: '8px',
-              overflow: 'hidden'
-            }}
-          />
-        </div>
-
-        {/* Content Container */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          {/* Greeting */}
-          <h1 className="text-2xl font-semibold mb-6">
-            {loading ? (
-              <span className="text-gray-400">Loading...</span>
-            ) : error ? (
-              <span className="text-red-500">Error: {error}</span>
-            ) : (
-              `Hello there, ${user.name}`
-            )}
-          </h1>
-
-          {/* Active Ride Status */}
-          {activeRide && (
-            <div className="mb-6 p-4 bg-pink-50 rounded-lg">
-              <h2 className="text-lg font-medium text-pink-700 mb-2">Active Ride</h2>
-              <p className="text-sm text-pink-600">From: {activeRide.pickup_location}</p>
-              <p className="text-sm text-pink-600">To: {activeRide.dropoff_location}</p>
-              <button
-                onClick={handleEndRide}
-                className="mt-3 w-full bg-pink-600 text-white py-2 px-4 rounded-full hover:bg-pink-700"
-              >
-                End Ride
-              </button>
-            </div>
-          )}
-
-          {/* Location Search Fields */}
-          {!activeRide && (
-            <div className="space-y-4 mb-6">
-              {/* Pickup Location */}
-              <LocationSearchInput
-                value={pickupLocation}
-                onChange={setPickupLocation}
-                onSelect={(location) => {
-                  setPickupLocation(location.name);
-                  setPickupCoordinates(location.coordinates);
-                }}
-                placeholder="Enter pickup location"
-              />
-
-              {/* Drop-off Location */}
-              <LocationSearchInput
-                value={dropoffLocation}
-                onChange={setDropoffLocation}
-                onSelect={(location) => {
-                  setDropoffLocation(location.name);
-                  setDropoffCoordinates(location.coordinates);
-                }}
-                placeholder="Enter drop-off location"
-              />
-
-              {/* Start Ride Button */}
-              <button
-                onClick={handleStartRide}
-                disabled={rideStatus.loading || !pickupLocation || !dropoffLocation}
-                className={`w-full flex items-center justify-center space-x-2 py-3 rounded-full text-white font-medium
-                  ${(rideStatus.loading || !pickupLocation || !dropoffLocation)
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-pink-500 hover:bg-pink-600'
-                  }`}
-              >
-                <Car className="w-5 h-5" />
-                <span>{rideStatus.loading ? 'Starting Ride...' : 'Start Ride'}</span>
-              </button>
-
-              {/* Status Messages */}
-              {rideStatus.error && (
-                <div className="text-red-500 text-sm text-center mt-2">
-                  {rideStatus.error}
-                </div>
-              )}
-              {rideStatus.success && (
-                <div className="text-green-500 text-sm text-center mt-2">
-                  {rideStatus.success}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tabs */}
-          <div className="flex space-x-4 mb-4 border-b">
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-1 flex justify-between items-center">
+          <div className="flex items-center">
+            <span className="text-sm font-semibold text-gray-900">Taxxi</span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className="text-xs text-gray-600">Welcome, {user?.name || 'User'}</span>
             <button
-              onClick={() => setActiveTab('recent')}
-              className={`pb-2 px-4 text-sm font-medium ${
-                activeTab === 'recent'
-                  ? 'text-pink-500 border-b-2 border-pink-500'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
+              onClick={handleLogout}
+              className="flex items-center px-2 py-1 border border-transparent rounded text-xs font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-1 focus:ring-offset-1 focus:ring-red-500"
             >
-              Recent Rides
-            </button>
-            <button
-              onClick={() => setActiveTab('saved')}
-              className={`pb-2 px-4 text-sm font-medium ${
-                activeTab === 'saved'
-                  ? 'text-pink-500 border-b-2 border-pink-500'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Saved Locations
+              <LogOut className="h-3 w-3 mr-1" />
+              Logout
             </button>
           </div>
+        </div>
+      </header>
 
-          {/* Tab Content */}
-          <div className="space-y-1">
-            {activeTab === 'recent' ? (
-              rideHistory.length > 0 ? (
-                rideHistory.map((ride, index) => (
-                  <RecentLocation
-                    key={index}
-                    name={ride.dropoff_location}
-                    description={`From: ${ride.pickup_location}`}
-                  />
-                ))
+      <div className="min-h-screen bg-gray-50">
+        <div className="w-[500px] mx-auto py-8">
+          {/* Map Container */}
+          <div className="bg-white rounded-lg shadow-lg p-2 mb-4">
+            <div 
+              ref={mapContainer}
+              style={{
+                width: '100%',
+                height: '300px',
+                borderRadius: '8px',
+                overflow: 'hidden'
+              }}
+            />
+          </div>
+
+          {/* Content Container */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            {/* Greeting */}
+            <h1 className="text-2xl font-semibold mb-6">
+              {loading ? (
+                <span className="text-gray-400">Loading...</span>
+              ) : error ? (
+                <span className="text-red-500">Error: {error}</span>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Clock className="w-8 h-8 mx-auto mb-2" />
-                  <p>No recent rides yet</p>
-                </div>
-              )
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <MapPin className="w-8 h-8 mx-auto mb-2" />
-                <p>No saved locations yet</p>
+                `Hello there, ${user.name}`
+              )}
+            </h1>
+
+            {/* Active Ride Status */}
+            {activeRide && (
+              <div className="mb-6 p-4 bg-pink-50 rounded-lg">
+                <h2 className="text-lg font-medium text-pink-700 mb-2">Active Ride</h2>
+                <p className="text-sm text-pink-600">From: {activeRide.pickup_location}</p>
+                <p className="text-sm text-pink-600">To: {activeRide.dropoff_location}</p>
+                <button
+                  onClick={handleEndRide}
+                  className="mt-3 w-full bg-pink-600 text-white py-2 px-4 rounded-full hover:bg-pink-700"
+                >
+                  End Ride
+                </button>
               </div>
             )}
+
+            {/* Location Search Fields */}
+            {!activeRide && (
+              <div className="space-y-4 mb-6">
+                {/* Pickup Location */}
+                <LocationSearchInput
+                  value={pickupLocation}
+                  onChange={setPickupLocation}
+                  onSelect={(location) => {
+                    setPickupLocation(location.name);
+                    setPickupCoordinates(location.coordinates);
+                  }}
+                  placeholder="Enter pickup location"
+                />
+
+                {/* Drop-off Location */}
+                <LocationSearchInput
+                  value={dropoffLocation}
+                  onChange={setDropoffLocation}
+                  onSelect={(location) => {
+                    setDropoffLocation(location.name);
+                    setDropoffCoordinates(location.coordinates);
+                  }}
+                  placeholder="Enter drop-off location"
+                />
+
+                {/* Passenger Count Input - Only show for family and company rides */}
+                {(rideType === 'family' || rideType === 'company') && (
+                  <div className="flex items-center space-x-2 py-2">
+                    <label htmlFor="passengerCount" className="text-sm text-gray-600">
+                      Number of passengers:
+                    </label>
+                    <select
+                      id="passengerCount"
+                      value={passengerCount}
+                      onChange={(e) => setPassengerCount(Number(e.target.value))}
+                      className="ml-2 px-2 py-1 border border-gray-300 rounded-md text-sm"
+                    >
+                      {[1, 2, 3, 4, 5, 6].map(num => (
+                        <option key={num} value={num}>{num}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Ride Type Buttons */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <button
+                    onClick={() => {
+                      setRideType('personal');
+                      setPassengerCount(1);
+                    }}
+                    className={`py-2 px-4 rounded-full text-sm font-medium ${
+                      rideType === 'personal'
+                        ? 'bg-pink-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Personal Ride
+                  </button>
+                  <button
+                    onClick={() => setRideType('family')}
+                    className={`py-2 px-4 rounded-full text-sm font-medium ${
+                      rideType === 'family'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Family Ride
+                  </button>
+                  <button
+                    onClick={() => setRideType('company')}
+                    className={`py-2 px-4 rounded-full text-sm font-medium ${
+                      rideType === 'company'
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Company Ride
+                  </button>
+                </div>
+
+                {/* Start Ride Button */}
+                <button
+                  onClick={handleStartRide}
+                  disabled={rideStatus.loading || !pickupLocation || !dropoffLocation}
+                  className={`w-full flex items-center justify-center space-x-2 py-3 rounded-full text-white font-medium
+                    ${(rideStatus.loading || !pickupLocation || !dropoffLocation)
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : rideType === 'personal'
+                      ? 'bg-pink-500 hover:bg-pink-600'
+                      : rideType === 'family'
+                      ? 'bg-blue-500 hover:bg-blue-600'
+                      : 'bg-green-500 hover:bg-green-600'
+                    }`}
+                >
+                  <Car className="w-5 h-5" />
+                  <span>
+                    {rideStatus.loading 
+                      ? 'Starting Ride...' 
+                      : `Start ${rideType.charAt(0).toUpperCase() + rideType.slice(1)} Ride`}
+                  </span>
+                </button>
+
+                {/* Status Messages */}
+                {rideStatus.error && (
+                  <div className="text-red-500 text-sm text-center mt-2">
+                    {rideStatus.error}
+                  </div>
+                )}
+                {rideStatus.success && (
+                  <div className="text-green-500 text-sm text-center mt-2">
+                    {rideStatus.success}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div className="flex space-x-4 mb-4 border-b">
+              <button
+                onClick={() => setActiveTab('recent')}
+                className={`pb-2 px-4 text-sm font-medium ${
+                  activeTab === 'recent'
+                    ? 'text-pink-500 border-b-2 border-pink-500'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Recent Rides
+              </button>
+              <button
+                onClick={() => setActiveTab('saved')}
+                className={`pb-2 px-4 text-sm font-medium ${
+                  activeTab === 'saved'
+                    ? 'text-pink-500 border-b-2 border-pink-500'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Saved Locations
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="space-y-1">
+              {activeTab === 'recent' ? (
+                rideHistory.length > 0 ? (
+                  rideHistory.map((ride, index) => (
+                    <RecentLocation
+                      key={index}
+                      name={ride.dropoff_location}
+                      description={`From: ${ride.pickup_location}`}
+                    />
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Clock className="w-8 h-8 mx-auto mb-2" />
+                    <p>No recent rides yet</p>
+                  </div>
+                )
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <MapPin className="w-8 h-8 mx-auto mb-2" />
+                  <p>No saved locations yet</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
