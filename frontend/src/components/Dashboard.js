@@ -4,8 +4,10 @@ import { Search, MapPin, Clock, Car, X, LogOut } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import LocationSearchInput from './LocationSearchInput';
 
-mapboxgl.accessToken = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
+// Set Mapbox token directly
+mapboxgl.accessToken = 'pk.eyJ1IjoibWF0dHl0dWQiLCJhIjoiY205MzFxdXJ4MGFmNTJrcjBjNjR1em5ubyJ9.x5Xg1-FVPgJV0w3clJ2NXg';
 
 const RecentLocation = ({ name, description }) => (
   <div className="flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
@@ -18,75 +20,6 @@ const RecentLocation = ({ name, description }) => (
     </div>
   </div>
 );
-
-const LocationSearchInput = ({ value, onChange, onSelect, placeholder }) => {
-  const [suggestions, setSuggestions] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const searchLocation = async (query) => {
-    if (!query) {
-      setSuggestions([]);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      // Bias the search to Ireland by using a bounding box
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxgl.accessToken}&country=ie&bbox=-10.76,51.35,-5.99,55.45&types=place,address,poi`
-      );
-      const data = await response.json();
-      setSuggestions(data.features || []);
-    } catch (error) {
-      console.error('Error fetching location suggestions:', error);
-    }
-    setIsLoading(false);
-  };
-
-  const handleInputChange = (e) => {
-    const value = e.target.value;
-    onChange(value);
-    searchLocation(value);
-  };
-
-  const handleSuggestionClick = (suggestion) => {
-    const locationName = suggestion.place_name;
-    onChange(locationName);
-    onSelect({
-      name: locationName,
-      coordinates: suggestion.center
-    });
-    setSuggestions([]);
-  };
-
-  return (
-    <div className="relative">
-      <input
-        type="text"
-        placeholder={placeholder}
-        value={value}
-        onChange={handleInputChange}
-        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-      />
-      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-      
-      {/* Suggestions dropdown */}
-      {suggestions.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200">
-          {suggestions.map((suggestion) => (
-            <div
-              key={suggestion.id}
-              className="px-4 py-2 hover:bg-gray-50 cursor-pointer"
-              onClick={() => handleSuggestionClick(suggestion)}
-            >
-              <p className="text-sm font-medium text-gray-900">{suggestion.place_name}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -108,26 +41,50 @@ const Dashboard = () => {
 
   // Initialize map when component mounts
   useEffect(() => {
-    if (!mapContainer.current) return;
+    if (!mapContainer.current || map.current) return;
 
     try {
+      console.log('Initializing map...');
+      
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: 'mapbox://styles/mapbox/streets-v11',
         center: [-6.2603, 53.3498], // Dublin coordinates
-        zoom: 13
+        zoom: 12,
+        accessToken: mapboxgl.accessToken
       });
 
+      console.log('Map instance created');
+
+      // Handle map load error
+      map.current.on('error', (e) => {
+        console.error('Map error:', e);
+        setError('Failed to load map: ' + (e.error?.message || 'Unknown error'));
+      });
+
+      // Handle successful map load
       map.current.on('load', () => {
+        console.log('Map loaded successfully');
+        map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
         map.current.resize();
+      });
+
+      // Handle style load error
+      map.current.on('styledata', (e) => {
+        console.log('Style loaded:', e);
       });
 
     } catch (error) {
       console.error('Map initialization error:', error);
+      setError('Failed to initialize map: ' + error.message);
     }
 
     return () => {
-      if (map.current) map.current.remove();
+      if (map.current) {
+        console.log('Cleaning up map instance');
+        map.current.remove();
+        map.current = null;
+      }
     };
   }, []);
 
@@ -420,24 +377,20 @@ const Dashboard = () => {
               <div className="space-y-4 mb-6">
                 {/* Pickup Location */}
                 <LocationSearchInput
-                  value={pickupLocation}
-                  onChange={setPickupLocation}
-                  onSelect={(location) => {
-                    setPickupLocation(location.name);
-                    setPickupCoordinates(location.coordinates);
-                  }}
                   placeholder="Enter pickup location"
+                  onSelect={(name, coordinates) => {
+                    setPickupLocation(name);
+                    setPickupCoordinates(coordinates);
+                  }}
                 />
 
                 {/* Drop-off Location */}
                 <LocationSearchInput
-                  value={dropoffLocation}
-                  onChange={setDropoffLocation}
-                  onSelect={(location) => {
-                    setDropoffLocation(location.name);
-                    setDropoffCoordinates(location.coordinates);
-                  }}
                   placeholder="Enter drop-off location"
+                  onSelect={(name, coordinates) => {
+                    setDropoffLocation(name);
+                    setDropoffCoordinates(coordinates);
+                  }}
                 />
 
                 {/* Passenger Count Input - Only show for family and company rides */}
