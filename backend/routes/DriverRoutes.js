@@ -67,8 +67,8 @@ router.post('/generate-test-ride', auth, isDriver, async (req, res) => {
         created_at
       ) VALUES (
         $1, $2, $3, 
-        point($4, $5),
-        point($6, $7),
+        ST_SetSRID(ST_MakePoint($4, $5), 4326),
+        ST_SetSRID(ST_MakePoint($6, $7), 4326),
         $8, $9, 
         'pending',
         CURRENT_TIMESTAMP
@@ -76,11 +76,11 @@ router.post('/generate-test-ride', auth, isDriver, async (req, res) => {
       RETURNING 
         id, 
         pickup_location, 
-        dropoff_location, 
-        pickup_coordinates[0] as pickup_longitude,
-        pickup_coordinates[1] as pickup_latitude,
-        dropoff_coordinates[0] as dropoff_longitude,
-        dropoff_coordinates[1] as dropoff_latitude,
+        dropoff_location,
+        ST_X(pickup_coordinates::geometry) as pickup_longitude,
+        ST_Y(pickup_coordinates::geometry) as pickup_latitude,
+        ST_X(dropoff_coordinates::geometry) as dropoff_longitude,
+        ST_Y(dropoff_coordinates::geometry) as dropoff_latitude,
         passenger_count, 
         ride_type, 
         status, 
@@ -118,8 +118,10 @@ router.get('/available', auth, isDriver, async (req, res) => {
         r.id,
         r.pickup_location as "pickupLocation",
         r.dropoff_location as "dropoffLocation",
-        r.pickup_coordinates as "pickupCoordinates",
-        r.dropoff_coordinates as "dropoffCoordinates",
+        ST_X(pickup_coordinates::geometry) as pickup_longitude,
+        ST_Y(pickup_coordinates::geometry) as pickup_latitude,
+        ST_X(dropoff_coordinates::geometry) as dropoff_longitude,
+        ST_Y(dropoff_coordinates::geometry) as dropoff_latitude,
         r.passenger_count as "passengerCount",
         r.created_at as "createdAt",
         r.ride_type as "rideType",
@@ -130,7 +132,14 @@ router.get('/available', auth, isDriver, async (req, res) => {
       ORDER BY r.created_at DESC
     `);
 
-    res.json(result.rows);
+    // Transform coordinates into arrays before sending response
+    const rides = result.rows.map(ride => ({
+      ...ride,
+      pickupCoordinates: [ride.pickup_longitude, ride.pickup_latitude],
+      dropoffCoordinates: [ride.dropoff_longitude, ride.dropoff_latitude]
+    }));
+
+    res.json(rides);
   } catch (error) {
     console.error('Error fetching available rides:', error);
     res.status(500).json({ message: 'Server error' });
@@ -227,8 +236,10 @@ router.get('/active-ride', auth, isDriver, async (req, res) => {
         r.id,
         r.pickup_location as "pickupLocation",
         r.dropoff_location as "dropoffLocation",
-        r.pickup_coordinates as "pickupCoordinates",
-        r.dropoff_coordinates as "dropoffCoordinates",
+        ST_X(pickup_coordinates::geometry) as pickup_longitude,
+        ST_Y(pickup_coordinates::geometry) as pickup_latitude,
+        ST_X(dropoff_coordinates::geometry) as dropoff_longitude,
+        ST_Y(dropoff_coordinates::geometry) as dropoff_latitude,
         r.passenger_count as "passengerCount",
         r.created_at as "createdAt",
         r.accepted_at as "acceptedAt",
@@ -241,7 +252,14 @@ router.get('/active-ride', auth, isDriver, async (req, res) => {
       LIMIT 1
     `, [req.user.id]);
 
-    res.json(result.rows[0] || null);
+    // Transform coordinates into arrays before sending response
+    const ride = result.rows[0] ? {
+      ...result.rows[0],
+      pickupCoordinates: [result.rows[0].pickup_longitude, result.rows[0].pickup_latitude],
+      dropoffCoordinates: [result.rows[0].dropoff_longitude, result.rows[0].dropoff_latitude]
+    } : null;
+
+    res.json(ride);
   } catch (error) {
     console.error('Error fetching active ride:', error);
     res.status(500).json({ message: 'Server error' });
@@ -256,10 +274,10 @@ router.get('/completed-rides', auth, isDriver, async (req, res) => {
         r.id,
         r.pickup_location,
         r.dropoff_location,
-        r.pickup_coordinates[0] as pickup_longitude,
-        r.pickup_coordinates[1] as pickup_latitude,
-        r.dropoff_coordinates[0] as dropoff_longitude,
-        r.dropoff_coordinates[1] as dropoff_latitude,
+        ST_X(pickup_coordinates::geometry) as pickup_longitude,
+        ST_Y(pickup_coordinates::geometry) as pickup_latitude,
+        ST_X(dropoff_coordinates::geometry) as dropoff_longitude,
+        ST_Y(dropoff_coordinates::geometry) as dropoff_latitude,
         r.passenger_count,
         r.ride_type,
         r.status,
@@ -273,7 +291,14 @@ router.get('/completed-rides', auth, isDriver, async (req, res) => {
       LIMIT 10
     `, [req.user.id]);
 
-    res.json(result.rows);
+    // Transform coordinates into arrays before sending response
+    const rides = result.rows.map(ride => ({
+      ...ride,
+      pickupCoordinates: [ride.pickup_longitude, ride.pickup_latitude],
+      dropoffCoordinates: [ride.dropoff_longitude, ride.dropoff_latitude]
+    }));
+
+    res.json(rides);
   } catch (error) {
     console.error('Error fetching completed rides:', error);
     res.status(500).json({ message: 'Server error while fetching completed rides' });
