@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import mapboxgl from 'mapbox-gl';
 import { Star, MapPin, Car, Clock, X } from 'lucide-react';
 import axios from 'axios';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-// Set your Mapbox access token
-const MAPBOX_TOKEN = 'pk.eyJ1IjoibWF0dHkxNTUiLCJhIjoiY2t0NzJoYjkxMm1uMjJwbXh4cG04bTJpNyJ9.suXrYn_woMd3wNVNEGn8Og';
-mapboxgl.accessToken = MAPBOX_TOKEN;
+// Set Mapbox token
+mapboxgl.accessToken = 'pk.eyJ1IjoibWF0dHl0dWQiLCJhIjoiY205MzFxdXJ4MGFmNTJrcjBjNjR1em5ubyJ9.x5Xg1-FVPgJV0w3clJ2NXg';
 
 const ActiveRide = () => {
   const navigate = useNavigate();
@@ -20,115 +19,112 @@ const ActiveRide = () => {
   const [showReview, setShowReview] = useState(false);
   const [rating, setRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
+  const markersRef = useRef([]);
 
-  // Initialize map when component mounts
+  // Load ride data
   useEffect(() => {
-    if (!mapContainer.current || map.current) return;
+    const storedRide = localStorage.getItem('activeRide');
+    console.log('Stored ride data:', storedRide);
+    
+    if (!storedRide) {
+      console.log('No active ride found in localStorage');
+      navigate('/dashboard');
+      return;
+    }
+
+    try {
+      const rideData = JSON.parse(storedRide);
+      console.log('Parsed ride data:', rideData);
+      setRide(rideData);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error parsing ride data:', error);
+      setError('Failed to load ride data: ' + error.message);
+      setLoading(false);
+    }
+  }, [navigate]);
+
+  // Initialize map after ride data is loaded and component is rendered
+  useEffect(() => {
+    if (!ride || loading || error || !mapContainer.current) {
+      return;
+    }
 
     const initializeMap = async () => {
       try {
-        map.current = new mapboxgl.Map({
-          container: mapContainer.current,
-          style: 'mapbox://styles/mapbox/streets-v12',
-          center: [-6.2603, 53.3498], // Dublin coordinates
-          zoom: 13
+        // Clear any existing markers
+        markersRef.current.forEach(marker => marker.remove());
+        markersRef.current = [];
+
+        // Format coordinates
+        const pickupCoords = Array.isArray(ride.pickupCoordinates) 
+          ? ride.pickupCoordinates 
+          : [ride.pickupCoordinates.longitude, ride.pickupCoordinates.latitude];
+        
+        const dropoffCoords = Array.isArray(ride.dropoffCoordinates)
+          ? ride.dropoffCoordinates
+          : [ride.dropoffCoordinates.longitude, ride.dropoffCoordinates.latitude];
+
+        console.log('Using coordinates:', {
+          pickup: pickupCoords,
+          dropoff: dropoffCoords
         });
 
-        // Wait for map to load
-        await new Promise((resolve, reject) => {
-          map.current.on('load', resolve);
-          map.current.on('error', reject);
+        // Initialize map
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: 'mapbox://styles/mapbox/streets-v11',
+          center: pickupCoords,
+          zoom: 12
         });
 
         // Add navigation controls
         map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-        
-        // Force a resize to ensure the map fills its container
-        map.current.resize();
+
+        // Wait for map to load before adding markers
+        map.current.once('load', () => {
+          console.log('Map loaded, adding markers');
+
+          // Add pickup marker
+          const pickupMarker = new mapboxgl.Marker({ color: '#ec4899' })
+            .setLngLat(pickupCoords)
+            .addTo(map.current);
+          markersRef.current.push(pickupMarker);
+
+          // Add dropoff marker
+          const dropoffMarker = new mapboxgl.Marker({ color: '#3b82f6' })
+            .setLngLat(dropoffCoords)
+            .addTo(map.current);
+          markersRef.current.push(dropoffMarker);
+
+          // Fit bounds to show both markers
+          const bounds = new mapboxgl.LngLatBounds()
+            .extend(pickupCoords)
+            .extend(dropoffCoords);
+
+          map.current.fitBounds(bounds, {
+            padding: 50,
+            duration: 1000
+          });
+        });
 
       } catch (error) {
-        console.error('Map initialization error:', error);
-        setError('Failed to load map');
+        console.error('Error initializing map:', error);
+        setError('Failed to initialize map: ' + error.message);
       }
     };
 
     initializeMap();
 
+    // Cleanup function
     return () => {
+      markersRef.current.forEach(marker => marker.remove());
       if (map.current) {
         map.current.remove();
         map.current = null;
       }
     };
-  }, []);
-
-  // Fetch active ride data
-  useEffect(() => {
-    const fetchActiveRide = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          navigate('/login');
-          return;
-        }
-
-        const response = await axios.get('http://localhost:5000/api/rides/active', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        if (response.data) {
-          setRide(response.data);
-          // If there's a driver, fetch driver details
-          if (response.data.driver_id) {
-            const driverResponse = await axios.get(`http://localhost:5000/api/users/${response.data.driver_id}`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            setDriver(driverResponse.data);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching active ride:', error);
-        setError('Failed to fetch ride details');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchActiveRide();
-  }, [navigate]);
-
-  // Update map markers when ride data changes
-  useEffect(() => {
-    if (!map.current || !ride) return;
-
-    // Remove existing markers
-    const markers = document.getElementsByClassName('mapboxgl-marker');
-    while(markers[0]) {
-      markers[0].remove();
-    }
-
-    // Add pickup marker
-    if (ride.pickup_coordinates) {
-      new mapboxgl.Marker({ color: '#ec4899' })
-        .setLngLat([ride.pickup_coordinates.longitude, ride.pickup_coordinates.latitude])
-        .addTo(map.current);
-    }
-
-    // Add dropoff marker
-    if (ride.dropoff_coordinates) {
-      new mapboxgl.Marker({ color: '#3b82f6' })
-        .setLngLat([ride.dropoff_coordinates.longitude, ride.dropoff_coordinates.latitude])
-        .addTo(map.current);
-    }
-
-    // Fit bounds to show both markers
-    if (ride.pickup_coordinates && ride.dropoff_coordinates) {
-      const bounds = new mapboxgl.LngLatBounds();
-      bounds.extend([ride.pickup_coordinates.longitude, ride.pickup_coordinates.latitude]);
-      bounds.extend([ride.dropoff_coordinates.longitude, ride.dropoff_coordinates.latitude]);
-      map.current.fitBounds(bounds, { padding: 50 });
-    }
-  }, [ride]);
+  }, [ride, loading, error]);
 
   const handleEndRide = async () => {
     try {
@@ -153,6 +149,9 @@ const ActiveRide = () => {
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      // Clear active ride data and redirect to dashboard
+      localStorage.removeItem('activeRide');
       navigate('/dashboard');
     } catch (error) {
       console.error('Error submitting review:', error);
@@ -197,14 +196,12 @@ const ActiveRide = () => {
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-1 flex justify-between items-center">
-          <div className="flex items-center">
-            <span className="text-sm font-semibold text-gray-900">Active Ride</span>
-          </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <h1 className="text-xl font-semibold text-gray-900">Active Ride</h1>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Map Container */}
         <div className="bg-white rounded-lg shadow-lg p-2 mb-6">
           <div 
@@ -225,11 +222,11 @@ const ActiveRide = () => {
           <div className="space-y-4">
             <div className="flex items-center text-gray-600">
               <MapPin className="h-5 w-5 mr-2" />
-              <span>From: {ride.pickup_location}</span>
+              <span>From: {ride.pickupLocation}</span>
             </div>
             <div className="flex items-center text-gray-600">
               <MapPin className="h-5 w-5 mr-2" />
-              <span>To: {ride.dropoff_location}</span>
+              <span>To: {ride.dropoffLocation}</span>
             </div>
             {driver && (
               <div className="flex items-center text-gray-600">
@@ -268,14 +265,21 @@ const ActiveRide = () => {
                       key={star}
                       type="button"
                       onClick={() => setRating(star)}
-                      className={`p-2 rounded-full ${
-                        star <= rating ? 'text-yellow-400' : 'text-gray-300'
-                      }`}
+                      className="focus:outline-none transition-colors duration-200"
                     >
-                      <Star className="h-6 w-6" />
+                      <Star
+                        className={`h-8 w-8 ${
+                          star <= rating
+                            ? 'text-yellow-400 fill-current'
+                            : 'text-gray-300'
+                        } hover:text-yellow-400 cursor-pointer transition-colors duration-200`}
+                      />
                     </button>
                   ))}
                 </div>
+                <p className="mt-1 text-sm text-gray-500">
+                  {rating === 0 ? 'Select a rating' : `${rating} star${rating !== 1 ? 's' : ''}`}
+                </p>
               </div>
 
               <div className="mb-4">
@@ -293,14 +297,19 @@ const ActiveRide = () => {
 
               <button
                 type="submit"
-                className="w-full bg-pink-500 text-white py-2 px-4 rounded-md hover:bg-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                disabled={rating === 0}
+                className={`w-full py-2 px-4 rounded-md text-white font-medium transition-colors duration-200 ${
+                  rating === 0
+                    ? 'bg-gray-300 cursor-not-allowed'
+                    : 'bg-pink-500 hover:bg-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500'
+                }`}
               >
                 Submit Review
               </button>
             </form>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };

@@ -38,7 +38,10 @@ const LocationSearchInput = ({ placeholder, onSelect }) => {
   const handleSuggestionClick = (suggestion) => {
     setQuery(suggestion.place_name);
     setSuggestions([]);
-    onSelect(suggestion.place_name, suggestion.center);
+    // Ensure coordinates are properly formatted as numbers
+    const coordinates = suggestion.center.map(coord => Number(coord));
+    console.log('Selected coordinates:', coordinates);
+    onSelect(suggestion.place_name, coordinates);
   };
 
   return (

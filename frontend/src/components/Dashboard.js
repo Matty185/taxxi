@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import mapboxgl from 'mapbox-gl';
-import { Search, MapPin, Clock, Car, X, LogOut } from 'lucide-react';
+import { Search, MapPin, Clock, Car, X, LogOut, Star } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -38,6 +38,7 @@ const Dashboard = () => {
   const [rideHistory, setRideHistory] = useState([]);
   const [rideType, setRideType] = useState('personal');
   const [passengerCount, setPassengerCount] = useState(1);
+  const [clearHistoryStatus, setClearHistoryStatus] = useState({ loading: false, error: null });
 
   // Initialize map when component mounts
   useEffect(() => {
@@ -225,56 +226,65 @@ const Dashboard = () => {
         throw new Error('No authentication token found');
       }
 
+      // Log the coordinates we received
+      console.log('Pickup coordinates:', pickupCoordinates);
+      console.log('Dropoff coordinates:', dropoffCoordinates);
+
+      // Ensure coordinates are arrays and convert to numbers
+      const pickup = Array.isArray(pickupCoordinates) 
+        ? pickupCoordinates.map(Number) 
+        : [Number(pickupCoordinates[0]), Number(pickupCoordinates[1])];
+      
+      const dropoff = Array.isArray(dropoffCoordinates)
+        ? dropoffCoordinates.map(Number)
+        : [Number(dropoffCoordinates[0]), Number(dropoffCoordinates[1])];
+
+      // Validate coordinates
+      if (pickup.some(isNaN) || dropoff.some(isNaN)) {
+        throw new Error('Invalid coordinates: coordinates must be valid numbers');
+      }
+
       const requestData = {
         pickupLocation,
         dropoffLocation,
-        pickupCoordinates: {
-          longitude: pickupCoordinates[0],
-          latitude: pickupCoordinates[1]
-        },
-        dropoffCoordinates: {
-          longitude: dropoffCoordinates[0],
-          latitude: dropoffCoordinates[1]
-        },
+        pickupCoordinates: pickup,
+        dropoffCoordinates: dropoff,
         rideType,
         passengerCount
       };
 
-      console.log('Sending request with data:', requestData);
-      console.log('Token:', token);
+      console.log('Sending request with data:', JSON.stringify(requestData, null, 2));
 
-      const response = await fetch('http://localhost:5000/api/rides/start', {
-        method: 'POST',
+      const response = await axios.post('http://localhost:5000/api/rides/start', requestData, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData)
+        }
       });
 
-      console.log('Response status:', response.status);
-      const responseData = await response.json();
-      console.log('Response data:', responseData);
+      console.log('Response received:', response.data);
 
-      if (!response.ok) {
-        throw new Error(responseData.message || responseData.error || 'Failed to start ride');
-      }
+      // Store ride data in localStorage for the active ride screen
+      const rideData = {
+        ...response.data,
+        pickupLocation,
+        dropoffLocation,
+        pickupCoordinates: pickup,
+        dropoffCoordinates: dropoff,
+        rideType,
+        passengerCount
+      };
 
-      setActiveRide(responseData);
-      setPickupLocation("");
-      setDropoffLocation("");
-      setPickupCoordinates(null);
-      setDropoffCoordinates(null);
-      setRideStatus({ 
-        loading: false, 
-        error: null, 
-        success: "Ride started successfully!" 
-      });
+      console.log('Storing ride data in localStorage:', rideData);
+      localStorage.setItem('activeRide', JSON.stringify(rideData));
+
+      // Navigate to active ride screen
+      navigate('/active-ride');
     } catch (error) {
       console.error('Error starting ride:', error);
       setRideStatus({ 
         loading: false, 
-        error: error.message || 'Failed to start ride' 
+        error: error.message || 'Failed to start ride'
       });
     }
   };
@@ -306,6 +316,55 @@ const Dashboard = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/login');
+  };
+
+  const handleClearHistory = async () => {
+    try {
+      setClearHistoryStatus({ loading: true, error: null });
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('Starting clear history request with token:', token.substring(0, 10) + '...');
+      
+      const response = await axios.delete('http://localhost:5000/api/rides/history', {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Clear history response:', response.data);
+      
+      // Only clear the history if the request was successful
+      if (response.data) {
+        await fetchRideHistory(); // Refresh the ride history instead of clearing it directly
+        setClearHistoryStatus({ loading: false, error: null });
+      }
+    } catch (error) {
+      console.error('Error clearing ride history:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        headers: error.response?.headers
+      });
+      
+      let errorMessage;
+      if (error.response?.status === 404) {
+        errorMessage = 'Server endpoint not found. Please check if the server is running.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication failed. Please try logging in again.';
+      } else {
+        errorMessage = error.response?.data?.message || error.message || 'Failed to clear ride history';
+      }
+      
+      setClearHistoryStatus({ 
+        loading: false, 
+        error: errorMessage
+      });
+    }
   };
 
   return (
@@ -512,20 +571,77 @@ const Dashboard = () => {
             {/* Tab Content */}
             <div className="space-y-1">
               {activeTab === 'recent' ? (
-                rideHistory.length > 0 ? (
-                  rideHistory.map((ride, index) => (
-                    <RecentLocation
-                      key={index}
-                      name={ride.dropoff_location}
-                      description={`From: ${ride.pickup_location}`}
-                    />
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <Clock className="w-8 h-8 mx-auto mb-2" />
-                    <p>No recent rides yet</p>
-                  </div>
-                )
+                <div>
+                  {rideHistory.length > 0 ? (
+                    <>
+                      <div className="space-y-2">
+                        {rideHistory.map((ride, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
+                                <MapPin className="h-4 w-4 text-gray-400" />
+                                <span className="text-sm font-medium text-gray-700">
+                                  To: {ride.dropoff_location}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <MapPin className="h-4 w-4 text-gray-400" />
+                                <span className="text-sm text-gray-500">
+                                  From: {ride.pickup_location}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <Clock className="h-4 w-4 text-gray-400" />
+                                <span className="text-xs text-gray-500">
+                                  {new Date(ride.created_at).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                            {ride.rating && (
+                              <div className="flex items-center ml-4">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star
+                                    key={star}
+                                    className={`h-4 w-4 ${
+                                      star <= ride.rating
+                                        ? 'text-yellow-400 fill-current'
+                                        : 'text-gray-300 stroke-current'
+                                    }`}
+                                    fill={star <= ride.rating ? 'currentColor' : 'none'}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={handleClearHistory}
+                        disabled={clearHistoryStatus.loading}
+                        className={`mt-4 w-full py-2 px-4 rounded-md text-white font-medium transition-colors duration-200 ${
+                          clearHistoryStatus.loading
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'
+                        }`}
+                      >
+                        {clearHistoryStatus.loading ? 'Clearing...' : 'Clear Ride History'}
+                      </button>
+                      {clearHistoryStatus.error && (
+                        <p className="mt-2 text-sm text-red-500 text-center">
+                          {clearHistoryStatus.error}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Clock className="w-8 h-8 mx-auto mb-2" />
+                      <p>No recent rides yet</p>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <MapPin className="w-8 h-8 mx-auto mb-2" />
