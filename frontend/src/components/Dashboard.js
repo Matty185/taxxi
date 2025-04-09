@@ -315,7 +315,9 @@ const Dashboard = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    navigate('/login');
+    localStorage.removeItem('user');
+    localStorage.removeItem('activeRide');
+    window.location.href = '/login';
   };
 
   const handleClearHistory = async () => {
