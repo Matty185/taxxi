@@ -229,12 +229,17 @@ router.post('/:rideId/complete', auth, isDriver, async (req, res) => {
   const { rideId } = req.params;
   
   try {
+    console.log('Completing ride:', { rideId, driverId: req.user.id });
+    
     await client.query('BEGIN');
 
+    // Check if ride exists and is active
     const rideCheck = await client.query(
       'SELECT status, driver_id FROM rides WHERE id = $1 FOR UPDATE',
       [rideId]
     );
+
+    console.log('Ride check result:', rideCheck.rows[0]);
 
     if (!rideCheck.rows[0]) {
       await client.query('ROLLBACK');
@@ -243,7 +248,7 @@ router.post('/:rideId/complete', auth, isDriver, async (req, res) => {
 
     if (rideCheck.rows[0].status !== 'accepted') {
       await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'Ride cannot be completed' });
+      return res.status(400).json({ message: 'Ride cannot be completed - not in accepted status' });
     }
 
     if (rideCheck.rows[0].driver_id !== req.user.id) {
@@ -251,17 +256,32 @@ router.post('/:rideId/complete', auth, isDriver, async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to complete this ride' });
     }
 
-    await client.query(
-      'UPDATE rides SET status = $1, completed_at = NOW() WHERE id = $2',
+    // Update the ride status
+    const updateResult = await client.query(
+      'UPDATE rides SET status = $1, completed_at = NOW() WHERE id = $2 RETURNING *',
       ['completed', rideId]
     );
 
+    console.log('Ride completed:', updateResult.rows[0]);
+
     await client.query('COMMIT');
-    res.json({ message: 'Ride completed successfully' });
+
+    res.json({ 
+      message: 'Ride completed successfully',
+      ride: updateResult.rows[0]
+    });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error completing ride:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error completing ride:', {
+      error: error.message,
+      stack: error.stack,
+      rideId,
+      driverId: req.user.id
+    });
+    res.status(500).json({ 
+      message: 'Server error while completing ride',
+      details: error.message
+    });
   }
 });
 

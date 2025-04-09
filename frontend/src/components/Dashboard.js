@@ -174,36 +174,36 @@ const Dashboard = () => {
   const fetchActiveRide = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/rides/active', {
+      const response = await axios.get('http://localhost:5000/api/rides/active', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
-      if (response.ok) {
-        const ride = await response.json();
-        setActiveRide(ride);
+      if (response.data) {
+        setActiveRide(response.data);
+      } else {
+        setActiveRide(null);
       }
     } catch (error) {
       console.error('Error fetching active ride:', error);
+      if (error.response?.status === 404) {
+        setActiveRide(null);
+      }
     }
   };
 
   const fetchRideHistory = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/rides/history', {
+      const response = await axios.get('http://localhost:5000/api/rides/history', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-
-      if (response.ok) {
-        const rides = await response.json();
-        setRideHistory(rides);
-      }
+      setRideHistory(response.data);
     } catch (error) {
       console.error('Error fetching ride history:', error);
     }
@@ -294,22 +294,36 @@ const Dashboard = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/rides/${activeRide.id}/end`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      console.log('Attempting to end ride:', activeRide.id);
+
+      const response = await axios.post(
+        `http://localhost:5000/api/rides/${activeRide.id}/end`,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         }
-      });
+      );
 
-      if (!response.ok) {
-        throw new Error('Failed to end ride');
-      }
+      console.log('End ride response:', response.data);
 
+      // Clear active ride from state and localStorage
       setActiveRide(null);
-      fetchRideHistory(); // Refresh ride history
+      localStorage.removeItem('activeRide');
+
+      // Refresh ride history
+      await fetchRideHistory();
+
+      // Show success message
+      setRideStatus({ loading: false, success: 'Ride ended successfully' });
     } catch (error) {
       console.error('Error ending ride:', error);
+      setRideStatus({
+        loading: false,
+        error: error.response?.data?.message || 'Failed to end ride'
+      });
     }
   };
 
@@ -368,6 +382,53 @@ const Dashboard = () => {
       });
     }
   };
+
+  // Add effect to periodically refresh active ride and history
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!loading) {
+        fetchActiveRide();
+        fetchRideHistory();
+      }
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [loading]);
+
+  // Initial data fetch
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError('No authentication token found');
+          setLoading(false);
+          return;
+        }
+
+        const userResponse = await axios.get('http://localhost:5000/api/auth/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        setUser(userResponse.data);
+        
+        // Fetch active ride and history
+        await fetchActiveRide();
+        await fetchRideHistory();
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setError(error.message);
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -586,19 +647,19 @@ const Dashboard = () => {
                               <div className="flex items-center space-x-2">
                                 <MapPin className="h-4 w-4 text-gray-400" />
                                 <span className="text-sm font-medium text-gray-700">
-                                  To: {ride.dropoff_location}
+                                  To: {ride.dropoffLocation}
                                 </span>
                               </div>
                               <div className="flex items-center space-x-2 mt-1">
                                 <MapPin className="h-4 w-4 text-gray-400" />
                                 <span className="text-sm text-gray-500">
-                                  From: {ride.pickup_location}
+                                  From: {ride.pickupLocation}
                                 </span>
                               </div>
                               <div className="flex items-center space-x-2 mt-1">
                                 <Clock className="h-4 w-4 text-gray-400" />
                                 <span className="text-xs text-gray-500">
-                                  {new Date(ride.created_at).toLocaleString()}
+                                  {new Date(ride.createdAt).toLocaleString()}
                                 </span>
                               </div>
                             </div>
