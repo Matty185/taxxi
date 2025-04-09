@@ -18,6 +18,13 @@ const isDriver = async (req, res, next) => {
   }
 };
 
+// Ride type mapping
+const RIDE_TYPES = {
+  'personal': 1,
+  'family': 2,
+  'company': 3
+};
+
 // Generate a test ride
 router.post('/generate-test-ride', auth, isDriver, async (req, res) => {
   try {
@@ -67,8 +74,8 @@ router.post('/generate-test-ride', auth, isDriver, async (req, res) => {
         created_at
       ) VALUES (
         $1, $2, $3, 
-        ST_SetSRID(ST_MakePoint($4, $5), 4326),
-        ST_SetSRID(ST_MakePoint($6, $7), 4326),
+        point($4, $5),
+        point($6, $7),
         $8, $9, 
         'pending',
         CURRENT_TIMESTAMP
@@ -77,10 +84,10 @@ router.post('/generate-test-ride', auth, isDriver, async (req, res) => {
         id, 
         pickup_location, 
         dropoff_location,
-        ST_X(pickup_coordinates::geometry) as pickup_longitude,
-        ST_Y(pickup_coordinates::geometry) as pickup_latitude,
-        ST_X(dropoff_coordinates::geometry) as dropoff_longitude,
-        ST_Y(dropoff_coordinates::geometry) as dropoff_latitude,
+        (pickup_coordinates[0]) as pickup_longitude,
+        (pickup_coordinates[1]) as pickup_latitude,
+        (dropoff_coordinates[0]) as dropoff_longitude,
+        (dropoff_coordinates[1]) as dropoff_latitude,
         passenger_count, 
         ride_type, 
         status, 
@@ -94,7 +101,7 @@ router.post('/generate-test-ride', auth, isDriver, async (req, res) => {
       dropoffLon,
       dropoffLat,
       req.body.passengerCount || 1,
-      req.body.rideType || 'personal'
+      req.body.rideType || 1  // Default to 1 for personal rides
     ]);
 
     console.log('Test ride created:', result.rows[0]);
@@ -118,10 +125,10 @@ router.get('/available', auth, isDriver, async (req, res) => {
         r.id,
         r.pickup_location as "pickupLocation",
         r.dropoff_location as "dropoffLocation",
-        ST_X(pickup_coordinates::geometry) as pickup_longitude,
-        ST_Y(pickup_coordinates::geometry) as pickup_latitude,
-        ST_X(dropoff_coordinates::geometry) as dropoff_longitude,
-        ST_Y(dropoff_coordinates::geometry) as dropoff_latitude,
+        (pickup_coordinates[0]) as pickup_longitude,
+        (pickup_coordinates[1]) as pickup_latitude,
+        (dropoff_coordinates[0]) as dropoff_longitude,
+        (dropoff_coordinates[1]) as dropoff_latitude,
         r.passenger_count as "passengerCount",
         r.created_at as "createdAt",
         r.ride_type as "rideType",
@@ -147,10 +154,12 @@ router.get('/available', auth, isDriver, async (req, res) => {
 });
 
 // Accept a ride
-router.post('/:rideId/accept', auth, isDriver, async (req, res) => {
+router.post('/accept/:rideId', auth, isDriver, async (req, res) => {
   const { rideId } = req.params;
   
   try {
+    console.log('Accepting ride:', { rideId, driverId: req.user.id });
+    
     // Start a transaction
     await client.query('BEGIN');
 
@@ -159,6 +168,8 @@ router.post('/:rideId/accept', auth, isDriver, async (req, res) => {
       'SELECT status FROM rides WHERE id = $1 FOR UPDATE',
       [rideId]
     );
+
+    console.log('Ride check result:', rideCheck.rows[0]);
 
     if (!rideCheck.rows[0]) {
       await client.query('ROLLBACK');
@@ -170,20 +181,46 @@ router.post('/:rideId/accept', auth, isDriver, async (req, res) => {
       return res.status(400).json({ message: 'Ride is no longer available' });
     }
 
+    // Check if driver already has an active ride
+    const activeRideCheck = await client.query(
+      'SELECT id FROM rides WHERE driver_id = $1 AND status = $2',
+      [req.user.id, 'accepted']
+    );
+
+    console.log('Active ride check:', activeRideCheck.rows[0]);
+
+    if (activeRideCheck.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'You already have an active ride' });
+    }
+
     // Update the ride with driver information
-    await client.query(
-      'UPDATE rides SET status = $1, driver_id = $2, accepted_at = NOW() WHERE id = $3',
+    const updateResult = await client.query(
+      'UPDATE rides SET status = $1, driver_id = $2, accepted_at = NOW() WHERE id = $3 RETURNING *',
       ['accepted', req.user.id, rideId]
     );
+
+    console.log('Ride updated:', updateResult.rows[0]);
 
     // Commit the transaction
     await client.query('COMMIT');
 
-    res.json({ message: 'Ride accepted successfully' });
+    res.json({ 
+      message: 'Ride accepted successfully',
+      ride: updateResult.rows[0]
+    });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error accepting ride:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error accepting ride:', {
+      error: error.message,
+      stack: error.stack,
+      rideId,
+      driverId: req.user.id
+    });
+    res.status(500).json({ 
+      message: 'Server error while accepting ride',
+      details: error.message
+    });
   }
 });
 
@@ -192,12 +229,17 @@ router.post('/:rideId/complete', auth, isDriver, async (req, res) => {
   const { rideId } = req.params;
   
   try {
+    console.log('Completing ride:', { rideId, driverId: req.user.id });
+    
     await client.query('BEGIN');
 
+    // Check if ride exists and is active
     const rideCheck = await client.query(
       'SELECT status, driver_id FROM rides WHERE id = $1 FOR UPDATE',
       [rideId]
     );
+
+    console.log('Ride check result:', rideCheck.rows[0]);
 
     if (!rideCheck.rows[0]) {
       await client.query('ROLLBACK');
@@ -206,7 +248,7 @@ router.post('/:rideId/complete', auth, isDriver, async (req, res) => {
 
     if (rideCheck.rows[0].status !== 'accepted') {
       await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'Ride cannot be completed' });
+      return res.status(400).json({ message: 'Ride cannot be completed - not in accepted status' });
     }
 
     if (rideCheck.rows[0].driver_id !== req.user.id) {
@@ -214,17 +256,32 @@ router.post('/:rideId/complete', auth, isDriver, async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to complete this ride' });
     }
 
-    await client.query(
-      'UPDATE rides SET status = $1, completed_at = NOW() WHERE id = $2',
+    // Update the ride status
+    const updateResult = await client.query(
+      'UPDATE rides SET status = $1, completed_at = NOW() WHERE id = $2 RETURNING *',
       ['completed', rideId]
     );
 
+    console.log('Ride completed:', updateResult.rows[0]);
+
     await client.query('COMMIT');
-    res.json({ message: 'Ride completed successfully' });
+
+    res.json({ 
+      message: 'Ride completed successfully',
+      ride: updateResult.rows[0]
+    });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error completing ride:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error completing ride:', {
+      error: error.message,
+      stack: error.stack,
+      rideId,
+      driverId: req.user.id
+    });
+    res.status(500).json({ 
+      message: 'Server error while completing ride',
+      details: error.message
+    });
   }
 });
 
@@ -236,10 +293,10 @@ router.get('/active-ride', auth, isDriver, async (req, res) => {
         r.id,
         r.pickup_location as "pickupLocation",
         r.dropoff_location as "dropoffLocation",
-        ST_X(pickup_coordinates::geometry) as pickup_longitude,
-        ST_Y(pickup_coordinates::geometry) as pickup_latitude,
-        ST_X(dropoff_coordinates::geometry) as dropoff_longitude,
-        ST_Y(dropoff_coordinates::geometry) as dropoff_latitude,
+        (pickup_coordinates[0]) as pickup_longitude,
+        (pickup_coordinates[1]) as pickup_latitude,
+        (dropoff_coordinates[0]) as dropoff_longitude,
+        (dropoff_coordinates[1]) as dropoff_latitude,
         r.passenger_count as "passengerCount",
         r.created_at as "createdAt",
         r.accepted_at as "acceptedAt",
@@ -274,10 +331,10 @@ router.get('/completed-rides', auth, isDriver, async (req, res) => {
         r.id,
         r.pickup_location,
         r.dropoff_location,
-        ST_X(pickup_coordinates::geometry) as pickup_longitude,
-        ST_Y(pickup_coordinates::geometry) as pickup_latitude,
-        ST_X(dropoff_coordinates::geometry) as dropoff_longitude,
-        ST_Y(dropoff_coordinates::geometry) as dropoff_latitude,
+        (pickup_coordinates[0]) as pickup_longitude,
+        (pickup_coordinates[1]) as pickup_latitude,
+        (dropoff_coordinates[0]) as dropoff_longitude,
+        (dropoff_coordinates[1]) as dropoff_latitude,
         r.passenger_count,
         r.ride_type,
         r.status,

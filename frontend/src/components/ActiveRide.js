@@ -23,25 +23,57 @@ const ActiveRide = () => {
 
   // Load ride data
   useEffect(() => {
-    const storedRide = localStorage.getItem('activeRide');
-    console.log('Stored ride data:', storedRide);
-    
-    if (!storedRide) {
-      console.log('No active ride found in localStorage');
-      navigate('/dashboard');
-      return;
-    }
+    const loadRideData = async () => {
+      try {
+        // First try to get current ride from server
+        const token = localStorage.getItem('token');
+        const response = await axios.get(
+          `http://localhost:5000/api/rides/active`,
+          {
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
 
-    try {
-      const rideData = JSON.parse(storedRide);
-      console.log('Parsed ride data:', rideData);
-      setRide(rideData);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error parsing ride data:', error);
-      setError('Failed to load ride data: ' + error.message);
-      setLoading(false);
-    }
+        console.log('Server ride data:', response.data);
+        
+        // Get stored ride data for any additional info
+        const storedRide = localStorage.getItem('activeRide');
+        console.log('Stored ride data:', storedRide);
+        
+        if (storedRide) {
+          const localRideData = JSON.parse(storedRide);
+          // Merge server data (takes precedence) with local data
+          setRide({
+            ...localRideData,
+            ...response.data
+          });
+        } else {
+          setRide(response.data);
+        }
+
+        // If there's driver info, set it
+        if (response.data.driver) {
+          setDriver(response.data.driver);
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error('Error loading ride data:', error);
+        if (error.response?.status === 404) {
+          // If no active ride on server, clear local storage and redirect
+          localStorage.removeItem('activeRide');
+          navigate('/dashboard');
+          return;
+        }
+        setError('Failed to load ride data: ' + (error.response?.data?.message || error.message));
+        setLoading(false);
+      }
+    };
+
+    loadRideData();
   }, [navigate]);
 
   // Initialize map after ride data is loaded and component is rendered
@@ -128,34 +160,98 @@ const ActiveRide = () => {
 
   const handleEndRide = async () => {
     try {
+      if (!ride || !ride.id) {
+        setError('No active ride found');
+        return;
+      }
+
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:5000/api/rides/${ride.id}/end`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
+      console.log('Attempting to end ride:', {
+        rideId: ride.id,
+        status: ride.status
       });
-      setShowReview(true);
+      
+      const response = await axios.post(
+        `http://localhost:5000/api/rides/${ride.id}/end`,
+        {},
+        {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('End ride response:', response.data);
+      
+      if (response.data.ride) {
+        // Update the ride status locally
+        setRide(prevRide => ({
+          ...prevRide,
+          ...response.data.ride,
+          status: 'completed'
+        }));
+        
+        // Show the review form
+        setShowReview(true);
+        
+        // Clear any existing errors
+        setError(null);
+      } else {
+        throw new Error('Invalid response format from server');
+      }
     } catch (error) {
-      console.error('Error ending ride:', error);
-      setError('Failed to end ride');
+      console.error('Error ending ride:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        rideId: ride?.id
+      });
+      setError(error.response?.data?.message || 'Failed to end ride');
     }
   };
 
   const handleSubmitReview = async (e) => {
     e.preventDefault();
     try {
+      if (!ride || !ride.id) {
+        setError('No ride found to review');
+        return;
+      }
+
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:5000/api/rides/${ride.id}/review`, {
+      console.log('Submitting review:', {
+        rideId: ride.id,
         rating,
-        review: reviewText
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
+        reviewText
       });
+
+      await axios.post(
+        `http://localhost:5000/api/rides/${ride.id}/review`,
+        {
+          rating,
+          review: reviewText
+        },
+        {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
       
-      // Clear active ride data and redirect to dashboard
+      // Clear active ride data
       localStorage.removeItem('activeRide');
-      navigate('/dashboard');
+      
+      // Redirect to dashboard with replace to prevent back navigation
+      navigate('/dashboard', { replace: true });
     } catch (error) {
-      console.error('Error submitting review:', error);
-      setError('Failed to submit review');
+      console.error('Error submitting review:', {
+        error: error.message,
+        response: error.response?.data,
+        rideId: ride?.id
+      });
+      setError(error.response?.data?.message || 'Failed to submit review');
     }
   };
 
@@ -238,9 +334,55 @@ const ActiveRide = () => {
               <Clock className="h-5 w-5 mr-2" />
               <span>Started: {new Date(ride.created_at).toLocaleTimeString()}</span>
             </div>
+            <div className="flex items-center text-gray-600">
+              <div className="font-medium">Status: </div>
+              <span className="ml-2 capitalize">{ride.status}</span>
+            </div>
           </div>
 
-          {!showReview && (
+          {ride.status === 'pending' && (
+            <div className="mt-6">
+              <div className="text-center text-gray-600 mb-4">
+                Waiting for a driver to accept your ride...
+              </div>
+              {/* Development only - Simulate driver button */}
+              <button
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem('token');
+                    const response = await axios.post(
+                      `http://localhost:5000/api/rides/${ride.id}/simulate-accept`,
+                      {},
+                      {
+                        headers: { 
+                          'Authorization': `Bearer ${token}`,
+                          'Content-Type': 'application/json'
+                        }
+                      }
+                    );
+                    
+                    // Update the ride data with the new driver
+                    setRide(response.data);
+                    setDriver(response.data.driver);
+                  } catch (error) {
+                    console.error('Error simulating driver accept:', error);
+                    setError('Failed to simulate driver acceptance');
+                  }
+                }}
+                className="w-full bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 mb-4"
+              >
+                Simulate Driver Accept (Dev Only)
+              </button>
+              <button
+                onClick={handleEndRide}
+                className="w-full bg-pink-500 text-white py-2 px-4 rounded-md hover:bg-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+              >
+                Cancel Ride
+              </button>
+            </div>
+          )}
+
+          {ride.status === 'accepted' && (
             <button
               onClick={handleEndRide}
               className="mt-6 w-full bg-pink-500 text-white py-2 px-4 rounded-md hover:bg-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
@@ -248,10 +390,16 @@ const ActiveRide = () => {
               End Ride
             </button>
           )}
+
+          {ride.status === 'completed' && !showReview && (
+            <div className="mt-6 text-center text-green-600">
+              Ride completed. Please leave a review.
+            </div>
+          )}
         </div>
 
         {/* Review Form */}
-        {showReview && (
+        {(showReview || ride.status === 'completed') && (
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Rate Your Ride</h2>
             <form onSubmit={handleSubmitReview}>
