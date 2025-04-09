@@ -3,27 +3,20 @@ require('dotenv').config();
 
 const pool = new Pool({
   user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'taxi',
   password: process.env.DB_PASSWORD || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+  database: process.env.DB_NAME || 'taxxi'
 });
 
 // Test the connection
 pool.connect((err, client, release) => {
   if (err) {
-    console.error('Error connecting to the database:', err);
-    return;
-  }
-  client.query('SELECT NOW()', (err, result) => {
-    release();
-    if (err) {
-      console.error('Error executing query:', err);
-      return;
-    }
+    console.error('Error connecting to the database:', err.stack);
+  } else {
     console.log('Successfully connected to the database');
-  });
+    release();
+  }
 });
 
 module.exports = pool;

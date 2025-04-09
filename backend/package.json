@@ -1,0 +1,14 @@
+{
+  "name": "taxxi-backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "migrate": "node scripts/migrate.js",
+    "setup-db": "node scripts/setup-local-db.js"
+  },
+  "engines": {
+    "node": "16.x"
+  }
+} 
