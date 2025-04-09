@@ -4,11 +4,25 @@ const Ride = require('../models/Ride');
 const auth = require('../middleware/auth');
 const client = require('../config/db');
 
+// Ride type mapping
+const RIDE_TYPES = {
+  'personal': 1,
+  'family': 2,
+  'company': 3
+};
+
 // Start a new ride
 router.post('/start', auth, async (req, res) => {
   try {
     console.log('Received request body:', JSON.stringify(req.body, null, 2));
-    const { pickupLocation, dropoffLocation, pickupCoordinates, dropoffCoordinates } = req.body;
+    const { 
+      pickupLocation, 
+      dropoffLocation, 
+      pickupCoordinates, 
+      dropoffCoordinates,
+      passengerCount = 1,
+      rideType = 'personal'
+    } = req.body;
     const userId = req.user.id;
 
     console.log('User ID:', userId);
@@ -16,6 +30,9 @@ router.post('/start', auth, async (req, res) => {
       pickup: pickupCoordinates,
       dropoff: dropoffCoordinates
     });
+
+    // Convert string ride type to integer
+    const rideTypeInt = RIDE_TYPES[rideType] || 1; // Default to personal (1) if invalid type
 
     // Validate input
     if (!pickupLocation || !dropoffLocation || !pickupCoordinates || !dropoffCoordinates) {
@@ -84,18 +101,53 @@ router.post('/start', auth, async (req, res) => {
 
     console.log('Creating ride with coordinates:', coordinates);
 
-    const ride = await Ride.createRide(
+    // Create the ride
+    const result = await client.query(`
+      INSERT INTO rides (
+        user_id,
+        pickup_location,
+        dropoff_location,
+        pickup_coordinates,
+        dropoff_coordinates,
+        passenger_count,
+        ride_type,
+        status,
+        created_at
+      ) VALUES (
+        $1, $2, $3,
+        point($4, $5),
+        point($6, $7),
+        $8, $9,
+        'pending',
+        CURRENT_TIMESTAMP
+      )
+      RETURNING 
+        id,
+        pickup_location,
+        dropoff_location,
+        (pickup_coordinates[0]) as pickup_longitude,
+        (pickup_coordinates[1]) as pickup_latitude,
+        (dropoff_coordinates[0]) as dropoff_longitude,
+        (dropoff_coordinates[1]) as dropoff_latitude,
+        passenger_count,
+        ride_type,
+        status,
+        created_at
+    `, [
       userId,
       pickupLocation,
       dropoffLocation,
-      new Date(),
-      coordinates.pickup,
-      coordinates.dropoff
-    );
+      pickupCoordinates[0],
+      pickupCoordinates[1],
+      dropoffCoordinates[0],
+      dropoffCoordinates[1],
+      passengerCount,
+      rideTypeInt
+    ]);
 
-    console.log('Ride created successfully:', ride);
+    console.log('Ride created successfully:', result.rows[0]);
 
-    res.status(201).json(ride);
+    res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error starting ride:', {
       message: error.message,

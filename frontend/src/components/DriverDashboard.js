@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, Car, MapPin, Clock, Plus, Check } from 'lucide-react';
 import axios from 'axios';
 
+// Ride type mapping
+const RIDE_TYPES = {
+  'personal': 1,
+  'family': 2,
+  'company': 3
+};
+
 const DriverDashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -163,7 +170,7 @@ const DriverDashboard = () => {
           latitude: dropoff.coords[1]
         },
         passengerCount: Math.floor(Math.random() * 3) + 1, // 1 to 3 passengers
-        rideType: ['personal', 'family', 'company'][Math.floor(Math.random() * 3)]
+        rideType: Math.floor(Math.random() * 3) + 1 // Random integer between 1 and 3
       };
 
       console.log('Sending test ride data:', testRide);
@@ -199,17 +206,19 @@ const DriverDashboard = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:5000/api/driver/${rideId}/accept`, {}, {
+      const response = await axios.post(`http://localhost:5000/api/driver/accept/${rideId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
+      console.log('Accept ride response:', response.data);
+      
       // Refresh both available rides and active ride
-      fetchAvailableRides();
-      fetchActiveRide();
+      await fetchAvailableRides();
+      await fetchActiveRide();
       setError(null);
     } catch (error) {
       console.error('Error accepting ride:', error);
-      setError('Failed to accept ride. Please try again.');
+      setError(error.response?.data?.message || 'Failed to accept ride. Please try again.');
     } finally {
       setLoading(false);
     }
