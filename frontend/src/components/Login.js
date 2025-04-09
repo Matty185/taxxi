@@ -3,14 +3,18 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import taxxi from '../assets/taxxi.png'; // Import the logo
 
-const Login = () => {
+const Login = ({ setIsAuthenticated, setUser }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
+
     try {
       console.log('Attempting login with:', { email });
       
@@ -22,19 +26,32 @@ const Login = () => {
       const { token, user } = response.data;
       console.log('Login response:', { user });
       
+      // Store token and user data
       localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
       
-      // Route based on user role
+      // Update authentication state
+      setIsAuthenticated(true);
+      setUser(user);
+      
+      console.log('User role:', user.role);
+
+      // Force a small delay to ensure state is updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Redirect based on user role
       if (user.role === 'driver') {
-        console.log('Routing to driver dashboard');
-        navigate('/driver-dashboard');
+        console.log('Redirecting to driver dashboard');
+        window.location.href = '/driver-dashboard';
       } else {
-        console.log('Routing to customer dashboard');
-        navigate('/dashboard');
+        console.log('Redirecting to customer dashboard');
+        window.location.href = '/dashboard';
       }
     } catch (err) {
       console.error('Login error:', err);
       setError(err.response?.data?.message || 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -50,6 +67,7 @@ const Login = () => {
           onChange={(e) => setEmail(e.target.value)}
           style={styles.input}
           required
+          disabled={loading}
         />
         <input
           type="password"
@@ -58,9 +76,17 @@ const Login = () => {
           onChange={(e) => setPassword(e.target.value)}
           style={styles.input}
           required
+          disabled={loading}
         />
-        <button type="submit" style={styles.button}>
-          Login
+        <button 
+          type="submit" 
+          style={{
+            ...styles.button,
+            ...(loading ? styles.buttonDisabled : {})
+          }}
+          disabled={loading}
+        >
+          {loading ? 'Logging in...' : 'Login'}
         </button>
         {error && <p style={styles.error}>{error}</p>}
       </form>
@@ -106,6 +132,10 @@ const styles = {
     backgroundColor: '#007bff',
     color: '#fff',
     cursor: 'pointer',
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
+    cursor: 'not-allowed',
   },
   link: {
     color: '#007bff',

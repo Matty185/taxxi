@@ -14,75 +14,95 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      axios.get('http://localhost:5000/api/auth/profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      .then(response => {
-        setUser(response.data);
-        setIsAuthenticated(true);
-      })
-      .catch(() => {
-        localStorage.removeItem('token');
-        setIsAuthenticated(false);
-      })
-      .finally(() => setLoading(false));
-    } else {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+      
+      if (token && storedUser) {
+        try {
+          const response = await axios.get('http://localhost:5000/api/auth/profile', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          setUser(response.data);
+          setIsAuthenticated(true);
+        } catch (error) {
+          console.error('Auth check failed:', error);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setIsAuthenticated(false);
+          setUser(null);
+        }
+      }
       setLoading(false);
-    }
+    };
+
+    checkAuth();
   }, []);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
+      </div>
+    );
   }
 
   return (
     <Router>
       <Routes>
         <Route path="/login" element={
-          !isAuthenticated ? <Login setIsAuthenticated={setIsAuthenticated} setUser={setUser} /> : 
-          (user?.role === 'driver' ? <Navigate to="/driver-dashboard" /> : <Navigate to="/dashboard" />)
+          !isAuthenticated ? (
+            <Login setIsAuthenticated={setIsAuthenticated} setUser={setUser} />
+          ) : (
+            <Navigate to={user?.role === 'driver' ? '/driver-dashboard' : '/dashboard'} replace />
+          )
         } />
+        
         <Route path="/register" element={
-          !isAuthenticated ? <Register setIsAuthenticated={setIsAuthenticated} setUser={setUser} /> : 
-          (user?.role === 'driver' ? <Navigate to="/driver-dashboard" /> : <Navigate to="/dashboard" />)
+          !isAuthenticated ? (
+            <Register setIsAuthenticated={setIsAuthenticated} setUser={setUser} />
+          ) : (
+            <Navigate to={user?.role === 'driver' ? '/driver-dashboard' : '/dashboard'} replace />
+          )
         } />
+
         <Route path="/verify-id" element={
           isAuthenticated && !user?.id_verified ? 
             <IdVerification user={user} /> : 
             (user?.role === 'driver' ? <Navigate to="/driver-dashboard" /> : <Navigate to="/dashboard" />)
         } />
+
         <Route path="/dashboard" element={
-          isAuthenticated ? (
-            user?.id_verified ? 
-              <Dashboard user={user} /> : 
-              <Navigate to="/verify-id" />
+          isAuthenticated && user?.role !== 'driver' ? (
+            <Dashboard />
+          ) : isAuthenticated ? (
+            <Navigate to="/driver-dashboard" replace />
           ) : (
-            <Navigate to="/login" />
+            <Navigate to="/login" replace />
           )
         } />
+
         <Route path="/driver-dashboard" element={
-          isAuthenticated ? (
-            user?.id_verified ? 
-              <DriverDashboard user={user} /> : 
-              <Navigate to="/verify-id" />
+          isAuthenticated && user?.role === 'driver' ? (
+            <DriverDashboard />
+          ) : isAuthenticated ? (
+            <Navigate to="/dashboard" replace />
           ) : (
-            <Navigate to="/login" />
+            <Navigate to="/login" replace />
           )
         } />
+
         <Route path="/active-ride" element={
-          isAuthenticated && user?.id_verified ? 
-            <ActiveRide user={user} /> : 
-            <Navigate to="/verify-id" />
+          isAuthenticated ? <ActiveRide /> : <Navigate to="/login" replace />
         } />
+
         <Route path="/" element={
-          isAuthenticated ? 
-            (user?.id_verified ? 
-              (user?.role === 'driver' ? <Navigate to="/driver-dashboard" /> : <Navigate to="/dashboard" />) :
-              <Navigate to="/verify-id" />
-            ) : 
-            <Navigate to="/login" />
+          isAuthenticated ? (
+            <Navigate to={user?.role === 'driver' ? '/driver-dashboard' : '/dashboard'} replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
         } />
       </Routes>
     </Router>
