@@ -25,6 +25,9 @@ app.use(cors({
 // Parse JSON request bodies
 app.use(express.json());
 
+// Parse URL-encoded bodies and handle file uploads
+app.use(express.urlencoded({ extended: true }));
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);

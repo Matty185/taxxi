@@ -4,10 +4,85 @@ const User = require("../models/User.js");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const auth = require("../middleware/auth");
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configure multer for file upload
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, '../uploads/ids');
+        // Create directory if it doesn't exist
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, `id-${Date.now()}${path.extname(file.originalname)}`);
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: function (req, file, cb) {
+        const filetypes = /jpeg|jpg|png/;
+        const mimetype = filetypes.test(file.mimetype);
+        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+
+        if (mimetype && extname) {
+            return cb(null, true);
+        }
+        cb(new Error('Only .png, .jpg and .jpeg format allowed!'));
+    }
+});
+
+// Upload ID for verification
+router.post("/verify-id", auth, upload.single('idImage'), async (req, res) => {
+    try {
+        console.log('Received ID verification request');
+        console.log('Request headers:', req.headers);
+        console.log('Request body:', req.body);
+        console.log('Request file:', req.file);
+        
+        if (!req.file) {
+            console.log('No file uploaded');
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+
+        console.log('File uploaded successfully:', {
+            filename: req.file.filename,
+            mimetype: req.file.mimetype,
+            size: req.file.size
+        });
+
+        // Update user's verification status
+        const user = await User.updateIdVerification(req.user.id, true);
+        console.log('User verification status updated:', user);
+        
+        res.json({ 
+            message: 'ID uploaded successfully. Verification pending.',
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                id_verified: user.id_verified
+            }
+        });
+    } catch (error) {
+        console.error('ID verification error:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({ 
+            message: 'Error processing ID verification',
+            error: error.message
+        });
+    }
+});
 
 // Register a new user
 router.post("/register", async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, phone, role } = req.body;
 
   try {
     console.log('Registration request received:', { name, email, role });
@@ -32,11 +107,22 @@ router.post("/register", async (req, res) => {
 
     // Create a new user
     console.log('Creating new user with role:', role);
-    const newUser = await User.createUser(name, email, password, role);
+    const newUser = await User.create({ 
+      name,
+      email, 
+      password,
+      phone,
+      role 
+    });
+    
     console.log('User created successfully:', { id: newUser.id, email: newUser.email, role: newUser.role });
     
     // Generate a JWT token
-    const token = jwt.sign({ id: newUser.id, role: newUser.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign(
+      { id: newUser.id, role: newUser.role }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: "1h" }
+    );
     
     const responseData = { 
       message: "User registered successfully", 
@@ -73,7 +159,7 @@ router.post("/login", async (req, res) => {
     }
 
     // Compare the provided password with the hashed password in the database
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    const isMatch = await User.verifyPassword(user, password);
     console.log('Password match:', isMatch);
     
     if (!isMatch) {
@@ -81,7 +167,12 @@ router.post("/login", async (req, res) => {
     }
 
     // Generate a JWT token
-    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign(
+      { id: user.id, role: user.role }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: "1h" }
+    );
+    
     console.log('Generated token for user:', { id: user.id, role: user.role });
     
     const responseData = { 

@@ -1,95 +1,129 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import taxxi from '../assets/taxxi.png';
 
-const Register = () => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState('customer');
+const Register = ({ setIsAuthenticated, setUser }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    phone: '',
+    role: 'customer'
+  });
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleRegister = async (e) => {
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleRoleChange = (selectedRole) => {
+    setFormData({
+      ...formData,
+      role: selectedRole
+    });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+
     try {
-      console.log('Attempting registration with:', { name, email, role });
+      console.log('Sending registration data:', formData);
       
       const response = await axios.post('http://localhost:5000/api/auth/register', {
-        name,
-        email,
-        password,
-        role,
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        phone: formData.phone,
+        role: formData.role
       });
-
-      console.log('Registration response:', response.data);
       
-      localStorage.setItem('token', response.data.token);
+      const { token, user } = response.data;
       
-      // Log the navigation attempt
-      console.log(`Navigating to ${role === 'driver' ? '/driver-dashboard' : '/dashboard'}`);
-      navigate(role === 'driver' ? '/driver-dashboard' : '/dashboard');
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      setIsAuthenticated(true);
+      setUser(user);
+      
+      // Always redirect to ID verification first
+      window.location.href = '/verify-id';
     } catch (err) {
       console.error('Registration error:', err.response?.data || err.message);
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(err.response?.data?.message || 'Registration failed');
     }
   };
 
   return (
     <div style={styles.container}>
       <img src={taxxi} alt="TAXXi Logo" style={styles.logo} />
-      <form onSubmit={handleRegister} style={styles.form}>
-        <input
-          type="text"
-          placeholder="Enter your full name..."
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          style={styles.input}
-          required
-        />
-        <input
-          type="email"
-          placeholder="Enter your email..."
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={styles.input}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Enter your password..."
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={styles.input}
-          required
-        />
-        
+      <form onSubmit={handleSubmit} style={styles.form}>
         <div style={styles.roleContainer}>
-          <label style={styles.roleLabel}>Register as:</label>
+          <p style={styles.roleLabel}>Register as:</p>
           <div style={styles.roleButtons}>
             <button
               type="button"
-              onClick={() => setRole('customer')}
+              onClick={() => handleRoleChange('customer')}
               style={{
                 ...styles.roleButton,
-                ...(role === 'customer' ? styles.roleButtonActive : {})
+                ...(formData.role === 'customer' ? styles.roleButtonActive : {})
               }}
             >
               Customer
             </button>
             <button
               type="button"
-              onClick={() => setRole('driver')}
+              onClick={() => handleRoleChange('driver')}
               style={{
                 ...styles.roleButton,
-                ...(role === 'driver' ? styles.roleButtonActive : {})
+                ...(formData.role === 'driver' ? styles.roleButtonActive : {})
               }}
             >
               Driver
             </button>
           </div>
         </div>
+
+        <input
+          type="text"
+          name="name"
+          placeholder="Enter your full name..."
+          value={formData.name}
+          onChange={handleChange}
+          style={styles.input}
+          required
+        />
+        <input
+          type="email"
+          name="email"
+          placeholder="Enter your email..."
+          value={formData.email}
+          onChange={handleChange}
+          style={styles.input}
+          required
+        />
+        <input
+          type="password"
+          name="password"
+          placeholder="Enter your password..."
+          value={formData.password}
+          onChange={handleChange}
+          style={styles.input}
+          required
+        />
+        <input
+          type="tel"
+          name="phone"
+          placeholder="Enter your phone number..."
+          value={formData.phone}
+          onChange={handleChange}
+          style={styles.input}
+          required
+        />
 
         <button type="submit" style={styles.button}>
           Register
@@ -98,9 +132,6 @@ const Register = () => {
       </form>
       <p style={styles.link} onClick={() => navigate('/login')}>
         Already have an account? Sign In
-      </p>
-      <p style={styles.link} onClick={() => navigate('/book-without-registration')}>
-        Book without registration
       </p>
     </div>
   );
@@ -127,37 +158,41 @@ const styles = {
     flexDirection: 'column',
     width: '300px',
   },
+  roleContainer: {
+    marginBottom: '20px',
+    width: '100%',
+  },
+  roleLabel: {
+    marginBottom: '10px',
+    color: '#333',
+    fontSize: '14px',
+    textAlign: 'center',
+  },
+  roleButtons: {
+    display: 'flex',
+    gap: '10px',
+    width: '100%',
+  },
+  roleButton: {
+    flex: 1,
+    padding: '10px',
+    border: '1px solid #007bff',
+    borderRadius: '5px',
+    backgroundColor: '#fff',
+    color: '#007bff',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontSize: '14px',
+  },
+  roleButtonActive: {
+    backgroundColor: '#007bff',
+    color: '#fff',
+  },
   input: {
     margin: '10px 0',
     padding: '10px',
     borderRadius: '5px',
     border: '1px solid #ccc',
-  },
-  roleContainer: {
-    margin: '10px 0',
-  },
-  roleLabel: {
-    marginBottom: '8px',
-    color: '#333',
-    fontSize: '14px',
-  },
-  roleButtons: {
-    display: 'flex',
-    gap: '10px',
-  },
-  roleButton: {
-    flex: 1,
-    padding: '8px',
-    border: '1px solid #ccc',
-    borderRadius: '5px',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  roleButtonActive: {
-    backgroundColor: '#007bff',
-    color: '#fff',
-    borderColor: '#0056b3',
   },
   button: {
     margin: '10px 0',
@@ -167,6 +202,7 @@ const styles = {
     backgroundColor: '#007bff',
     color: '#fff',
     cursor: 'pointer',
+    transition: 'background-color 0.2s ease',
   },
   link: {
     color: '#007bff',
@@ -176,7 +212,7 @@ const styles = {
   error: {
     color: 'red',
     textAlign: 'center',
-  },
+  }
 };
 
 export default Register;
