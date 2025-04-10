@@ -246,8 +246,13 @@ const DriverDashboard = () => {
   };
 
   const handleLogout = () => {
+    // Clear all auth-related data
     localStorage.removeItem('token');
-    navigate('/login');
+    localStorage.removeItem('user');
+    localStorage.removeItem('activeRide');
+    
+    // Use window.location.href for reliable redirection
+    window.location.href = '/login';
   };
 
   const formatDateTime = (dateString) => {
