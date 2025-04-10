@@ -57,7 +57,6 @@ const Login = ({ setIsAuthenticated, setUser }) => {
 
   return (
     <div style={styles.container}>
-      {/* Add the logo */}
       <img src={taxxi} alt="TAXXi Logo" style={styles.logo} />
       <form onSubmit={handleLogin} style={styles.form}>
         <input
@@ -78,21 +77,31 @@ const Login = ({ setIsAuthenticated, setUser }) => {
           required
           disabled={loading}
         />
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           style={{
             ...styles.button,
             ...(loading ? styles.buttonDisabled : {})
           }}
           disabled={loading}
         >
-          {loading ? 'Logging in...' : 'Login'}
+          {loading ? 'Signing in...' : 'Sign in'}
         </button>
         {error && <p style={styles.error}>{error}</p>}
+        <p style={styles.link} onClick={() => navigate('/register')}>
+          Don't have an account? Sign Up
+        </p>
+        <div style={styles.divider}>
+          <span style={styles.dividerText}>Or</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/guest')}
+          style={styles.guestButton}
+        >
+          Book as guest
+        </button>
       </form>
-      <p style={styles.link} onClick={() => navigate('/register')}>
-        Don't have an account? Sign Up
-      </p>
     </div>
   );
 };
@@ -107,22 +116,27 @@ const styles = {
     backgroundColor: '#f5f5f5',
   },
   logo: {
-    width: '300px', // Match the width of the form
-    maxWidth: '100%', // Ensure it doesn't overflow on smaller screens
-    height: 'auto', // Maintain aspect ratio
-    marginBottom: '20px', // Add spacing below the logo
-    objectFit: 'contain', // Ensure the logo scales properly
+    width: '300px',
+    maxWidth: '100%',
+    height: 'auto',
+    marginBottom: '20px',
+    objectFit: 'contain',
   },
   form: {
     display: 'flex',
     flexDirection: 'column',
     width: '300px',
+    backgroundColor: 'white',
+    padding: '20px',
+    borderRadius: '8px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
   },
   input: {
     margin: '10px 0',
     padding: '10px',
     borderRadius: '5px',
-    border: '1px solid #ccc',
+    border: '1px solid #ddd',
+    fontSize: '14px',
   },
   button: {
     margin: '10px 0',
@@ -130,22 +144,53 @@ const styles = {
     borderRadius: '5px',
     border: 'none',
     backgroundColor: '#007bff',
-    color: '#fff',
+    color: 'white',
     cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'background-color 0.2s',
   },
   buttonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#80bfff',
     cursor: 'not-allowed',
   },
   link: {
     color: '#007bff',
     cursor: 'pointer',
-    margin: '5px 0',
+    margin: '10px 0',
+    textAlign: 'center',
+    fontSize: '14px',
   },
   error: {
-    color: 'red',
+    color: '#ef4444',
     textAlign: 'center',
+    margin: '10px 0',
+    fontSize: '14px',
   },
+  divider: {
+    display: 'flex',
+    alignItems: 'center',
+    margin: '15px 0',
+  },
+  dividerText: {
+    flex: 1,
+    textAlign: 'center',
+    color: '#6b7280',
+    fontSize: '14px',
+    position: 'relative',
+  },
+  guestButton: {
+    margin: '10px 0',
+    padding: '10px',
+    borderRadius: '5px',
+    border: '1px solid #007bff',
+    backgroundColor: 'white',
+    color: '#007bff',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'all 0.2s',
+  }
 };
 
 export default Login;
