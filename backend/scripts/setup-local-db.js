@@ -7,8 +7,17 @@ const setupDatabase = async () => {
   try {
     console.log('Setting up local database...');
 
-    // Create database if it doesn't exist
+    // Drop database if it exists and create a new one
+    try {
+      await execPromise('dropdb -U postgres --if-exists taxxi');
+      console.log('Dropped existing database');
+    } catch (error) {
+      console.log('No existing database to drop');
+    }
+
+    // Create new database
     await execPromise('createdb -U postgres taxxi');
+    console.log('Created new database');
 
     // Connect to the database and run schema
     const schemaPath = path.join(__dirname, '../database/schema.sql');
@@ -16,12 +25,14 @@ const setupDatabase = async () => {
 
     // Execute schema creation
     await execPromise(`psql -U postgres -d taxxi -f ${schemaPath}`);
+    console.log('Schema created successfully');
 
-    // Grant permissions after tables are created
+    // Grant necessary permissions
     const grantCommands = [
       'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;',
       'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;',
-      'GRANT ALL PRIVILEGES ON DATABASE taxxi TO postgres;'
+      'GRANT ALL PRIVILEGES ON DATABASE taxxi TO postgres;',
+      'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO postgres;'
     ];
 
     for (const command of grantCommands) {
@@ -30,32 +41,8 @@ const setupDatabase = async () => {
 
     console.log('Database setup completed successfully!');
   } catch (error) {
-    if (error.message.includes('already exists')) {
-      console.log('Database already exists, continuing with schema updates...');
-      try {
-        // Try to update schema and permissions
-        const schemaPath = path.join(__dirname, '../database/schema.sql');
-        await execPromise(`psql -U postgres -d taxxi -f ${schemaPath}`);
-        
-        const grantCommands = [
-          'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;',
-          'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;',
-          'GRANT ALL PRIVILEGES ON DATABASE taxxi TO postgres;'
-        ];
-
-        for (const command of grantCommands) {
-          await execPromise(`psql -U postgres -d taxxi -c "${command}"`);
-        }
-        
-        console.log('Schema and permissions updated successfully!');
-      } catch (schemaError) {
-        console.error('Error updating schema:', schemaError);
-        process.exit(1);
-      }
-    } else {
-      console.error('Error setting up database:', error);
-      process.exit(1);
-    }
+    console.error('Error setting up database:', error);
+    process.exit(1);
   }
 };
 
@@ -63,7 +50,7 @@ const setupDatabase = async () => {
 const execPromise = (command) => {
   return new Promise((resolve, reject) => {
     exec(command, (error, stdout, stderr) => {
-      if (error && !error.message.includes('already exists')) {
+      if (error) {
         reject(error);
         return;
       }
