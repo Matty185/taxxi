@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import mapboxgl from 'mapbox-gl';
-import { Star, MapPin, Car, Clock, X } from 'lucide-react';
+import { Star, MapPin, Car, Clock, X, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -20,6 +20,10 @@ const ActiveRide = () => {
   const [rating, setRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
   const markersRef = useRef([]);
+  const [showPanicConfirm, setShowPanicConfirm] = useState(false);
+  const [panicSent, setPanicSent] = useState(false);
+  const [panicError, setPanicError] = useState(null);
+  const [emergencyEmail, setEmergencyEmail] = useState('');
 
   // Load ride data
   useEffect(() => {
@@ -255,6 +259,49 @@ const ActiveRide = () => {
     }
   };
 
+  const handlePanic = async () => {
+    try {
+      if (!ride || !ride.id) {
+        setPanicError('No active ride found');
+        return;
+      }
+
+      if (!emergencyEmail) {
+        setPanicError('Please provide an emergency contact email');
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      
+      console.log('Triggering panic alert:', {
+        rideId: ride.id,
+        emergencyEmail
+      });
+
+      const response = await axios.post(
+        'http://localhost:5000/api/panic/trigger',
+        {
+          rideId: ride.id,
+          emergencyEmail
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('Panic alert response:', response.data);
+      setPanicSent(true);
+      setShowPanicConfirm(false);
+      setEmergencyEmail('');
+    } catch (error) {
+      console.error('Error triggering panic alert:', error);
+      setPanicError(error.response?.data?.message || 'Failed to send panic alert');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -287,6 +334,72 @@ const ActiveRide = () => {
       </div>
     );
   }
+
+  const renderPanicButton = () => (
+    <div className="mt-6">
+      {!panicSent ? (
+        <>
+          {!showPanicConfirm ? (
+            <button
+              onClick={() => setShowPanicConfirm(true)}
+              className="w-full bg-red-600 text-white py-3 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 flex items-center justify-center"
+            >
+              <AlertTriangle className="w-5 h-5 mr-2" />
+              Emergency Panic Button
+            </button>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-center text-red-600 font-medium">
+                Are you sure you want to trigger a panic alert?
+                Emergency services will be notified.
+              </p>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">
+                  Emergency Contact Email
+                </label>
+                <input
+                  type="email"
+                  value={emergencyEmail}
+                  onChange={(e) => setEmergencyEmail(e.target.value)}
+                  placeholder="Enter emergency contact email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  required
+                />
+              </div>
+              <div className="flex space-x-4">
+                <button
+                  onClick={handlePanic}
+                  className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700"
+                >
+                  Yes, Send Alert
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPanicConfirm(false);
+                    setEmergencyEmail('');
+                  }}
+                  className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-center p-4 bg-green-50 rounded-md">
+          <p className="text-green-600 font-medium">
+            Emergency alert has been sent to {emergencyEmail}. Help is on the way.
+          </p>
+        </div>
+      )}
+      {panicError && (
+        <p className="mt-2 text-center text-red-600">
+          {panicError}
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -397,6 +510,8 @@ const ActiveRide = () => {
             </div>
           )}
         </div>
+
+        {!showReview && ride.status !== 'completed' && renderPanicButton()}
 
         {/* Review Form */}
         {(showReview || ride.status === 'completed') && (

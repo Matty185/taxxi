@@ -5,6 +5,7 @@ const db = require("./config/db");
 const authRoutes = require("./routes/AuthRoutes");
 const rideRoutes = require("./routes/RideRoutes");
 const driverRoutes = require("./routes/DriverRoutes");
+const panicRoutes = require("./routes/PanicRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,6 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/driver", driverRoutes);
+app.use("/api/panic", panicRoutes);
 
 // Test route
 app.get("/", (req, res) => {
