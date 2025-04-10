@@ -61,7 +61,7 @@ const Register = ({ setIsAuthenticated, setUser }) => {
   return (
     <div style={styles.container}>
       <img src={taxxi} alt="TAXXi Logo" style={styles.logo} />
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} style={styles.form} aria-label="registration-form">
         <div style={styles.roleContainer}>
           <p style={styles.roleLabel}>Register as:</p>
           <div style={styles.roleButtons}>

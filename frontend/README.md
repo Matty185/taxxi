@@ -68,3 +68,39 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+### Testing
+
+Using Jest as a testing framework
+
+### Explanation:
+1. **`backend/tests/example.test.js`**: A simple test file for the backend to verify Jest is working.
+2. **`frontend/jest.config.js`**: A Jest configuration file for the frontend to ensure proper setup.
+
+### Install Jest:
+Run the following commands to install Jest for both the backend and frontend:
+
+```sh
+# Navigate to the backend directory and install Jest
+cd backend
+npm install --save-dev jest
+
+# Navigate to the frontend directory and install Jest
+cd ../frontend
+npm install --save-dev jest
+```
+
+### Run Tests:
+To run the tests for each part of your workspace, use the following commands:
+
+```sh
+# Run backend tests
+cd backend
+npx jest
+
+# Run frontend tests
+cd ../frontend
+npx jest
+```
+
+I also recommend installing the Jest extension to make tests easy to run in VS Code: @id:Orta.vscode-jest
