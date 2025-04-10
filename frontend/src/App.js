@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import DriverDashboard from './components/DriverDashboard';
 import ActiveRide from './components/ActiveRide';
 import IdVerification from './components/IdVerification';
+import GuestDashboard from './components/GuestDashboard';
 import axios from 'axios';
 
 function App() {
@@ -51,59 +52,88 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={
-          !isAuthenticated ? (
-            <Login setIsAuthenticated={setIsAuthenticated} setUser={setUser} />
-          ) : (
-            <Navigate to={user?.role === 'driver' ? '/driver-dashboard' : '/dashboard'} replace />
-          )
-        } />
-        
-        <Route path="/register" element={
-          !isAuthenticated ? (
-            <Register setIsAuthenticated={setIsAuthenticated} setUser={setUser} />
-          ) : (
-            <Navigate to={user?.role === 'driver' ? '/driver-dashboard' : '/dashboard'} replace />
-          )
-        } />
-
-        <Route path="/verify-id" element={
-          isAuthenticated && !user?.id_verified ? 
-            <IdVerification user={user} /> : 
-            (user?.role === 'driver' ? <Navigate to="/driver-dashboard" /> : <Navigate to="/dashboard" />)
-        } />
-
-        <Route path="/dashboard" element={
-          isAuthenticated && user?.role !== 'driver' ? (
-            <Dashboard />
-          ) : isAuthenticated ? (
-            <Navigate to="/driver-dashboard" replace />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        } />
-
-        <Route path="/driver-dashboard" element={
-          isAuthenticated && user?.role === 'driver' ? (
-            <DriverDashboard />
-          ) : isAuthenticated ? (
-            <Navigate to="/dashboard" replace />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        } />
-
-        <Route path="/active-ride" element={
-          isAuthenticated ? <ActiveRide /> : <Navigate to="/login" replace />
-        } />
-
-        <Route path="/" element={
-          isAuthenticated ? (
-            <Navigate to={user?.role === 'driver' ? '/driver-dashboard' : '/dashboard'} replace />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        } />
+        <Route 
+          path="/login" 
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" />
+            ) : (
+              <Login setIsAuthenticated={setIsAuthenticated} setUser={setUser} />
+            )
+          } 
+        />
+        <Route 
+          path="/register" 
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" />
+            ) : (
+              <Register setIsAuthenticated={setIsAuthenticated} setUser={setUser} />
+            )
+          } 
+        />
+        <Route 
+          path="/dashboard" 
+          element={
+            isAuthenticated ? (
+              user?.role === 'driver' ? (
+                <Navigate to="/driver-dashboard" />
+              ) : (
+                <Dashboard />
+              )
+            ) : (
+              <Navigate to="/login" />
+            )
+          } 
+        />
+        <Route 
+          path="/driver-dashboard" 
+          element={
+            isAuthenticated && user?.role === 'driver' ? (
+              <DriverDashboard />
+            ) : (
+              <Navigate to="/login" />
+            )
+          } 
+        />
+        <Route 
+          path="/active-ride" 
+          element={
+            isAuthenticated ? (
+              <ActiveRide />
+            ) : (
+              <Navigate to="/login" />
+            )
+          } 
+        />
+        <Route 
+          path="/verify-id" 
+          element={
+            isAuthenticated ? (
+              <IdVerification />
+            ) : (
+              <Navigate to="/login" />
+            )
+          } 
+        />
+        <Route 
+          path="/guest" 
+          element={<GuestDashboard />} 
+        />
+        <Route 
+          path="/" 
+          element={
+            isAuthenticated ? (
+              user?.role === 'driver' ? (
+                <Navigate to="/driver-dashboard" />
+              ) : (
+                <Navigate to="/dashboard" />
+              )
+            ) : (
+              <Navigate to="/login" />
+            )
+          } 
+        />
       </Routes>
     </Router>
   );
